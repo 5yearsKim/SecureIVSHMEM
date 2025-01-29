@@ -33,6 +33,33 @@ setup-alpine
 
 
 
+### Make a Shared Directory
+
+make a dirctory `shared` and use this option:
+
+```sh
+  -virtfs local,path=./shared,security_model=passthrough,mount_tag=shared \
+```
+
+then type this command on guest VM,
+
+```sh
+sudo mkdir -p /mnt/shared
+sudo mount -t 9p -o trans=virtio,version=9p2000.L shared /mnt/shared
+```
+
+- `-t 9p`: Specifies the 9p filesystem type.
+- `-o trans=virtio,version=9p2000.L`: Sets the transport method to virtio and specifies the 9p protocol version.
+- `shared`: The mount_tag specified in the QEMU command.
+- `/mnt/shared`: The mount point inside the guest.
+
+
+
+## IVSHMEM Communication Tutorial
+
+https://liujunming.top/2021/11/30/QEMU-tutorial-Inter-VM-Shared-Memory-device/
+
+
 
 
 
