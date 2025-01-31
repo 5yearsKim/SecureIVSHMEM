@@ -65,6 +65,13 @@ sudo mount -t 9p -o trans=virtio,version=9p2000.L shared /mnt/shared
 - `/mnt/shared`: The mount point inside the guest.
 
 
+## Interrupt Server Setup
+
+```sh
+sudo ./ivshmem-server -v -F -S /tmp/ivshmem_socket -M ivshmem -m /dev/shm -l 1M -n 1
+```
+
+
 
 ## IVSHMEM Communication Tutorial
 

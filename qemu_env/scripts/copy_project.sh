@@ -1,7 +1,7 @@
 #!/bin/bash
 
 
-PRJ_NAME=ipc_shm_em
+PRJ_NAME=ivshmem_perf
 IS_ROOT=true
 HOME="/root"
 
