@@ -9,36 +9,21 @@
 #include "ivshmem_lib.h"
 
 int main(int argc, char **argv) {
-  void *p, *data_ptr;
-  struct IvshmemControlSection *ctr_ptr;
+  uint32_t *p_data;
+  struct IvshmemDeviceContext dev_ctx;
+  struct IvshmemControlSection *p_ctr;
   int fd;
   int i;
 
-  const char *data_to_write = "this is a sample data";
+  ivshmem_init_dev_ctx(&dev_ctx);
+  ivshmem_open_dev(&dev_ctx);
 
-  printf("init from here\n");
-
-  // fd = open(IVSHMEM_PATH, O_RDWR);
-  // printf("hello, fd: %d\n", fd);
-  // assert(fd != -1);
-
-  fd = ivshmem_open_fd();
-
-  p = mmap(NULL, IVSHMEM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-  if (p == MAP_FAILED) {
-    printf("Failed to map shared memory\n");
-    close(fd);
-    return EXIT_FAILURE;
-  }
-
-  printf("pointer location: %p\n", (void *)p);
-
-  ctr_ptr = p;
-  data_ptr = p + CONTROL_SECTION_SIZE;
+  p_ctr = (struct IvshmemControlSection*) dev_ctx.p_shmem;
+  p_data = dev_ctx.p_shmem + CONTROL_SECTION_SIZE;
 
   struct IvshmemChannelKey key = {
       .sender_vm = 1, .sender_pid = -1, .receiver_vm = 2};
-  struct IvshmemChannel *channel = ivshmem_read_channel(ctr_ptr, &key);
+  struct IvshmemChannel *channel = ivshmem_read_channel(p_ctr, &key);
 
   if (channel) {
     printf("Channel found! Buffer Size: %zu, Data Size: %zu\n",
@@ -47,17 +32,7 @@ int main(int argc, char **argv) {
     printf("Channel not found!\n");
   }
 
-  // memcpy(data_ptr, data_to_write, strlen(data_to_write) + 1);
-
-  // printf("data written: %s\n", data_ptr);
-
-  // printf("Data written:\n");
-  // for (i = 0; i < 100; i++) {
-  //     printf("char %d: %c\n", i, data_ptr[i]);
-  // }
-
-  munmap(p, IVSHMEM_SIZE);
-  close(fd);
+  ivshmem_close_dev(&dev_ctx);
 
   return 0;
 }

@@ -6,13 +6,16 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
+
+
 #include "ivshmem_lib.h"
 
 int main(int argc, char **argv) {
-  void *p, *data_ptr;
-  struct IvshmemControlSection *ctr_ptr;
+  uint32_t *p_data;
+  struct IvshmemDeviceContext dev_ctx;
+  struct IvshmemControlSection *p_ctr;
   int fd;
-  int i;
+  int i, ret;
 
   const char *data_to_write = "this is a sample data";
 
@@ -22,37 +25,31 @@ int main(int argc, char **argv) {
   // printf("hello, fd: %d\n", fd);
   // assert(fd != -1);
 
-  fd = ivshmem_open_fd();
+  ivshmem_init_dev_ctx(&dev_ctx);
+  ret = ivshmem_open_dev(&dev_ctx);
 
-  p = mmap(NULL, IVSHMEM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-  if (p == MAP_FAILED) {
-    printf("Failed to map shared memory\n");
-    close(fd);
-    return EXIT_FAILURE;
-  }
+  assert(ret == 0);
 
-  printf("pointer location: %p\n", (void *)p);
-
-  ctr_ptr = p;
-  data_ptr = p + CONTROL_SECTION_SIZE;
+  p_ctr = (struct IvshmemControlSection*) dev_ctx.p_shmem;
+  p_data = dev_ctx.p_shmem + CONTROL_SECTION_SIZE;
 
   printf("Control section:\n");
 
   // initialize the control section
-  ctr_ptr->free_start_offset = CONTROL_SECTION_SIZE;
-  ctr_ptr->num_entry = 1;
-  ctr_ptr->channels[0].key.sender_vm = 1;
-  ctr_ptr->channels[0].key.sender_pid = getpid();
-  ctr_ptr->channels[0].key.receiver_vm = 2;
-  ctr_ptr->channels[0].buf_offset = CONTROL_SECTION_SIZE;
-  ctr_ptr->channels[0].buf_size = 1024;
-  ctr_ptr->channels[0].data_size = 12;
-  ctr_ptr->channels[0].ref_count = 1;
+  p_ctr->free_start_offset = CONTROL_SECTION_SIZE;
+  p_ctr->num_entry = 1;
+  p_ctr->channels[0].key.sender_vm = 1;
+  p_ctr->channels[0].key.sender_pid = getpid();
+  p_ctr->channels[0].key.receiver_vm = 2;
+  p_ctr->channels[0].buf_offset = CONTROL_SECTION_SIZE;
+  p_ctr->channels[0].buf_size = 512;
+  p_ctr->channels[0].data_size = 25;
+  p_ctr->channels[0].ref_count = 1;
 
   // Add buffer size to free_start_offset
-  ctr_ptr->free_start_offset += 1024;
+  p_ctr->free_start_offset += 1024;
 
-  munmap(p, IVSHMEM_SIZE);
+  ivshmem_close_dev(&dev_ctx);
   close(fd);
 
   return 0;

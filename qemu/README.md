@@ -29,7 +29,18 @@ login with id `root` and type default password (just enter) and login. Then inst
 setup-alpine
 ```
 
-[references](https://daehee87.tistory.com/182)
+> Note that you should select `Disk` as `sda`. Select `sys` after then.
+
+### References
+- [QEMU install alpine linux](https://daehee87.tistory.com/182)
+
+<br/>
+
+#### VM Setup
+
+For setting up VM environment, follow this guide:
+<br/>
+[Setup Alpine Linux](./docs/setup_alpine.md)
 
 
 

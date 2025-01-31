@@ -4,7 +4,7 @@
 
 # Get all files under ./src
 # files=$(find ./src -type f)
-files=("./src/reader.c" "./src/ivshmem_lib.h" "./src/ivshmem_lib.c")
+files=("./src/writer.c" "./include/ivshmem_lib.h" "./src/ivshmem_lib.c")
 
 
 for file in ${files[@]} ; do
