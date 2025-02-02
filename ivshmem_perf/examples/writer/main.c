@@ -6,8 +6,7 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
-
-
+#include "ivshmem_data.h"
 #include "ivshmem_lib.h"
 
 int main(int argc, char **argv) {
@@ -30,14 +29,14 @@ int main(int argc, char **argv) {
 
   assert(ret == 0);
 
-  p_ctr = (struct IvshmemControlSection*) dev_ctx.p_shmem;
+  p_ctr = (struct IvshmemControlSection *)dev_ctx.p_shmem;
   p_data = dev_ctx.p_shmem + CONTROL_SECTION_SIZE;
 
   printf("Control section:\n");
 
   // initialize the control section
   p_ctr->free_start_offset = CONTROL_SECTION_SIZE;
-  p_ctr->num_entry = 1;
+  p_ctr->num_active_channels = 1;
   p_ctr->channels[0].key.sender_vm = 1;
   p_ctr->channels[0].key.sender_pid = getpid();
   p_ctr->channels[0].key.receiver_vm = 2;

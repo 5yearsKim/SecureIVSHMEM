@@ -3,7 +3,7 @@
 # Copy a directory to the shared memory
 
 WORK_DIR=$(realpath $(dirname $0)/..)
-TARET_DIR="../qemu/shared/ivshmem_perf"
+TARET_DIR="../qemu_env/shared/ivshmem_perf"
 
 cd $WORK_DIR
 
