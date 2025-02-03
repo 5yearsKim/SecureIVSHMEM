@@ -30,23 +30,25 @@ int main(int argc, char **argv) {
   assert(ret == 0);
 
   p_ctr = (struct IvshmemControlSection *)dev_ctx.p_shmem;
-  p_data = dev_ctx.p_shmem + CONTROL_SECTION_SIZE;
+  p_data = ivshmem_get_data_section(p_ctr);
 
-  printf("Control section:\n");
 
-  // initialize the control section
-  p_ctr->free_start_offset = CONTROL_SECTION_SIZE;
-  p_ctr->num_active_channels = 1;
-  p_ctr->channels[0].key.sender_vm = 1;
-  p_ctr->channels[0].key.sender_pid = getpid();
-  p_ctr->channels[0].key.receiver_vm = 2;
-  p_ctr->channels[0].buf_offset = CONTROL_SECTION_SIZE;
-  p_ctr->channels[0].buf_size = 512;
-  p_ctr->channels[0].data_size = 25;
-  p_ctr->channels[0].ref_count = 1;
+  struct IvshmemChannelKey key = {
+      .sender_vm = 1, .sender_pid = 1234, .receiver_vm = 2};
 
-  // Add buffer size to free_start_offset
-  p_ctr->free_start_offset += 1024;
+  printf("Requesting channel...\n");
+  struct IvshmemChannel *channel = ivshmem_request_channel(p_ctr, &key);
+
+  if (!channel) {
+    printf("Failed to request a channel :(\n");
+    return -1;
+  }
+
+  
+
+  printf("Channel requested! Buffer Size: %zu, Data Size: %zu\n",
+          channel->buf_size, channel->data_size);
+
 
   ivshmem_close_dev(&dev_ctx);
   close(fd);

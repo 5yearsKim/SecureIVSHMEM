@@ -11,26 +11,7 @@
 
 int get_vm_id() { return 1; }
 
-int ivshmem_open_fd() {
-  int fd;
-  const char *shmName = "/mysharedmem";
-
-  fd = shm_open(shmName, O_CREAT | O_RDWR, 0666);
-  if (fd == -1) {
-    printf("Failed to create/open shared memory\n");
-    return -1;
-  }
-
-  // 2. Set the size of the shared memory object
-  if (ftruncate(fd, IVSHMEM_SIZE) == -1) {
-    printf("Failed to set size for shared memory\n");
-    return -1;
-  }
-  return fd;
-}
-
 // Functions from ACRN project
-
 void ivshmem_init_dev_ctx(struct IvshmemDeviceContext *p_dev_ctx) {
   int i;
   memset(p_dev_ctx, 0, sizeof(struct IvshmemDeviceContext));
@@ -71,7 +52,23 @@ uint32_t _ivshmem_get_shmem_size() {
 }
 
 int ivshmem_open_dev(struct IvshmemDeviceContext *p_dev_ctx) {
-  eventfd_t evt_fd;
+#if IVSHMEM_RUNNING_OS == 1  // SHM
+  const char *shmName = "/mysharedmem";
+  p_dev_ctx->bar0_fd = -1;
+  p_dev_ctx->p_reg = NULL;
+  p_dev_ctx->bar2_fd = shm_open("/mysharedmem", O_CREAT | O_RDWR, 0666);
+  if (p_dev_ctx->bar2_fd == -1) {
+    printf("Failed to create/open shared memory\n");
+    return -1;
+  }
+  if (ftruncate(p_dev_ctx->bar2_fd, IVSHMEM_SIZE) == -1) {
+    printf("Failed to set size for shared memory\n");
+    return -1;
+  }
+  p_dev_ctx->p_shmem = mmap(NULL, IVSHMEM_SIZE, PROT_READ | PROT_WRITE,
+                            MAP_SHARED, p_dev_ctx->bar2_fd, 0);
+
+#else
 
   p_dev_ctx->bar0_fd = open(IVSHMEM_RESOURCE0_PATH, O_RDWR);
   if (p_dev_ctx->bar0_fd < 0) {
@@ -94,17 +91,20 @@ int ivshmem_open_dev(struct IvshmemDeviceContext *p_dev_ctx) {
     printf("Failed to open %s\n", IVSHMEM_RESOURCE2_PATH);
     return -1;
   }
-
   p_dev_ctx->shmem_size = _ivshmem_get_shmem_size();
   printf("shmem_size %lu\n", p_dev_ctx->shmem_size);
   p_dev_ctx->p_shmem = mmap(NULL, p_dev_ctx->shmem_size, PROT_READ | PROT_WRITE,
                             MAP_SHARED, p_dev_ctx->bar2_fd, 0);
+
+#endif
+
   if (p_dev_ctx->p_shmem == MAP_FAILED) {
     printf("Failed to map %s\n", IVSHMEM_RESOURCE2_PATH);
     close(p_dev_ctx->bar2_fd);
     return -1;
   }
 
+  // eventfd_t evt_fd;
   // p_dev_ctx->io_fd = open(IVSHMEM_PCI_PATH, O_RDWR);
   // if (p_dev_ctx->io_fd < 0) {
   //   printf("Failed to open %s\n", IVSHMEM_PCI_PATH);
@@ -152,16 +152,16 @@ void ivshmem_close_dev(struct IvshmemDeviceContext *p_dev_ctx) {
     p_dev_ctx->bar2_fd = -1;
   }
 
-  int i;
-  /* used for doorbell mode*/
-  for (i = 0; i < IVSHMEM_MAX_IRQ; i++) {
-    close(p_dev_ctx->irq_data[i].fd);
-    p_dev_ctx->irq_data[i].fd = -1;
-    close(p_dev_ctx->epfds_irq[i]);
-    p_dev_ctx->epfds_irq[i] = -1;
-  }
-  close(p_dev_ctx->io_fd);
-  p_dev_ctx->io_fd = -1;
+  // int i;
+  // /* used for doorbell mode*/
+  // for (i = 0; i < IVSHMEM_MAX_IRQ; i++) {
+  //   close(p_dev_ctx->irq_data[i].fd);
+  //   p_dev_ctx->irq_data[i].fd = -1;
+  //   close(p_dev_ctx->epfds_irq[i]);
+  //   p_dev_ctx->epfds_irq[i] = -1;
+  // }
+  // close(p_dev_ctx->io_fd);
+  // p_dev_ctx->io_fd = -1;
 }
 
 int ivshmem_observe() {

@@ -43,7 +43,8 @@
 // static dev_t dev_num;
 // static struct class *ivshmem_class;
 
-// static int ivshmem_probe(struct pci_dev *pdev, const struct pci_device_id *id) {
+// static int ivshmem_probe(struct pci_dev *pdev, const struct pci_device_id
+// *id) {
 //   struct IvshmemControl *ctrl;
 
 //   if (pci_enable_device(pdev)) return -ENODEV;
@@ -88,8 +89,8 @@
 //   }
 //   device_create(ivshmem_class, NULL, dev_num, NULL, DEVICE_NAME);
 
-//   pr_info("IVSHMEM driver probed successfully. /dev/%s ready.\n", DEVICE_NAME);
-//   return 0;
+//   pr_info("IVSHMEM driver probed successfully. /dev/%s ready.\n",
+//   DEVICE_NAME); return 0;
 // }
 
 // static void ivshmem_remove(struct pci_dev *pdev) {
