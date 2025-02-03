@@ -52,6 +52,10 @@ struct IvshmemChannel *ivshmem_find_channel(
 struct IvshmemChannel *ivshmem_request_channel(
     struct IvshmemControlSection *p_ctr_sec, struct IvshmemChannelKey *key);
 
+int ivshmem_send_buffer(struct IvshmemChannel *p_chan, void *p_shm,
+                        void *p_buffer, size_t size);
 
+int ivshmem_recv_buffer(struct IvshmemChannel *p_chan, void *p_shm,
+                        void *p_buffer, size_t size);
 
 #endif

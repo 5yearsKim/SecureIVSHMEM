@@ -6,14 +6,14 @@
 #include "ivshmem_data.h"
 #include "ivshmem_lib.h"
 
-/* Kill a channel if it is inactive for this many milliseconds */
-#define IVSHMEM_CHANNEL_KILL_THRESHOLD (3 * 1000)
+/* Kill a channel if it is inactive for this many seconds */
+#define IVSHMEM_CHANNEL_KILL_THRESHOLD 5
 /* Rebalance interval in milliseconds */
 #define IVSHMEM_CHANNEL_REBALANCE_INTERVAL (5 * 1000)
 /* Initial channel buffer size */
-#define IVSHMEM_CHANNEL_INIT_SIZE (100 * 1024)
+#define IVSHMEM_CHANNEL_INIT_SIZE (10 * 1024)
 
-#define IVSHMEM_CHANNEL_ADD_VALUE (100 * 1024)
+#define IVSHMEM_CHANNEL_ADD_VALUE (10 * 1024)
 
 #define IVSHMEM_CHANNEL_DECREASE_MULTIPLIER 0.8
 

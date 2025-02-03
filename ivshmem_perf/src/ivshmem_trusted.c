@@ -27,22 +27,9 @@ int ivshmem_check_is_control_requested(
   return (p_ctr_sec->has_channel_candidate) ? 1 : 0;
 }
 
-/*
- * Rebalance channels:
- * - For each active channel, if the channel has been inactive (based on
- * last_sent_at) for longer than IVSHMEM_CHANNEL_KILL_THRESHOLD, then “kill”
- * (remove) the channel.
- * - If a channel is active (sent_count > 0), you might consider increasing its
- * buffer.
- * - For simplicity, this example prints actions and resets the sent_count.
- *
- * p_data is assumed to point to the start of the data section (if needed to
- * copy data).
- */
 int ivshmem_trusted_rebalancing(struct IvshmemControlSection *p_ctr_sec,
                                 void *p_data) {
   if (p_ctr_sec->num_active_channels <= 0) {
-    printf("No channels to rebalance\n");
     return 0;
   }
 
@@ -68,10 +55,9 @@ int ivshmem_trusted_rebalancing(struct IvshmemControlSection *p_ctr_sec,
 
     /* If the channel has been inactive too long, kill it */
     if (p_chan->sent_count == 0 &&
-        (now - p_chan->last_sent_at) * 1000 > IVSHMEM_CHANNEL_KILL_THRESHOLD) {
+        (now - p_chan->last_sent_at) > IVSHMEM_CHANNEL_KILL_THRESHOLD) {
       printf("Killing inactive channel: sender_vm=%d, receiver_vm=%d\n",
              p_chan->key.sender_vm, p_chan->key.receiver_vm);
-      p_ctr_sec->num_active_channels--;
     } else {
       p_ctr_sec->channels[cnt] = *p_chan;
       p_ctr_sec->channels[cnt].buf_offset = p_ctr_sec->free_start_offset;
@@ -82,6 +68,7 @@ int ivshmem_trusted_rebalancing(struct IvshmemControlSection *p_ctr_sec,
       cnt++;
     }
   }
+  p_ctr_sec->num_active_channels = cnt;
   memset(&p_ctr_sec->channels[cnt], 0,
          sizeof(struct IvshmemChannel) * (IVSHMEM_MAX_CHANNELS - cnt));
 
@@ -98,19 +85,6 @@ int ivshmem_trusted_control(struct IvshmemControlSection *p_ctr_sec) {
   if (!p_ctr_sec->has_channel_candidate) {
     // No pending request.
     return 0;
-  }
-
-  /* Check available channels */
-  if (p_ctr_sec->num_active_channels >= IVSHMEM_MAX_CHANNELS) {
-    printf("No more channels can be created (limit reached)\n");
-    p_ctr_sec->has_channel_candidate = false;
-    return -1;
-  }
-  if (p_ctr_sec->free_start_offset + IVSHMEM_CHANNEL_INIT_SIZE >
-      DATA_SECTION_SIZE) {
-    printf("Insufficient space for new channel\n");
-    p_ctr_sec->has_channel_candidate = false;
-    return -1;
   }
 
   /* Create the new channel */
