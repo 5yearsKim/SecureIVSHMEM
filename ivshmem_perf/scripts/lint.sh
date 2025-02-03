@@ -2,9 +2,10 @@
 
 SRC_DIR="./src"
 INCLUDE_DIR="./include"
+EXAMPLE_DIR="./examples"
 
 # Find files in both src and include directories
-files=$(find "${SRC_DIR}" "${INCLUDE_DIR}" -type f \
+files=$(find "${SRC_DIR}" "${INCLUDE_DIR}" "${EXAMPLE_DIR}" -type f \
     \( -name "*.h" -o -name "*.hpp" -o -name "*.cpp" -o -name "*.c" \) \
     ! -path "${SRC_DIR}/libb64/*") # Exclude libb64 in src
 

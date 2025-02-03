@@ -28,7 +28,7 @@
 #define IVSHMEM_MAX_IRQ 8
 #define IVSHMEM_BAR0_SIZE 256
 // #define IVSHMEM_PATH "~/ivshmem"
-#define IVSHMEM_SIZE (30* 1024 )
+#define IVSHMEM_SIZE (1 * 1024 * 1024)
 // Maximum number of IRQs.
 
 struct IvshmemIrqData {

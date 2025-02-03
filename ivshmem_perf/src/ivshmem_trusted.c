@@ -33,6 +33,8 @@ int ivshmem_trusted_rebalancing(struct IvshmemControlSection *p_ctr_sec,
     return 0;
   }
 
+  p_ctr_sec->control_mutex = 1;  // Lock the control section
+
   time_t now = time(NULL);
 
   struct IvshmemChannel *p_chan_tmp =
@@ -72,7 +74,9 @@ int ivshmem_trusted_rebalancing(struct IvshmemControlSection *p_ctr_sec,
   memset(&p_ctr_sec->channels[cnt], 0,
          sizeof(struct IvshmemChannel) * (IVSHMEM_MAX_CHANNELS - cnt));
 
-  free(p_chan_tmp);
+  free(p_chan_tmp);              // Free the temporary channel array
+  p_ctr_sec->control_mutex = 0;  // Unlock the control section
+
   return 0;
 }
 
@@ -87,6 +91,8 @@ int ivshmem_trusted_control(struct IvshmemControlSection *p_ctr_sec) {
     return 0;
   }
 
+  p_ctr_sec->control_mutex = 1;  // Lock the control section
+
   /* Create the new channel */
   int ret = ivshmem_create_channel(p_ctr_sec, &p_ctr_sec->channel_candidate);
   if (ret == 0) {
@@ -97,6 +103,8 @@ int ivshmem_trusted_control(struct IvshmemControlSection *p_ctr_sec) {
     printf("Failed to create channel\n");
   }
   p_ctr_sec->has_channel_candidate = false;
+
+  p_ctr_sec->control_mutex = 0;  // Unlock the control section
   return ret;
 }
 
