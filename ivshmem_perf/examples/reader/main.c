@@ -8,7 +8,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "ivshmem_data.h"
+#include "ivshmem_secure.h"
 #include "ivshmem_lib.h"
 
 #define MESSAGE_SIZE                                      \

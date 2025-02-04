@@ -7,7 +7,7 @@ include_directories(${CMAKE_SOURCE_DIR}/src)
 
 set(IVSHMEM_LIB_SOURCES
     ${CMAKE_SOURCE_DIR}/src/ivshmem_lib.c
-    ${CMAKE_SOURCE_DIR}/src/ivshmem_data.c
+    ${CMAKE_SOURCE_DIR}/src/ivshmem_secure.c
 )
 
 add_executable(writer

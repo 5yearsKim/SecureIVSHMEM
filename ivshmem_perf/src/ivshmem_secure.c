@@ -1,4 +1,4 @@
-#include "ivshmem_data.h"
+#include "ivshmem_secure.h"
 
 #include <string.h>
 #include <time.h>
