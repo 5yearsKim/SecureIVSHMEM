@@ -74,7 +74,7 @@ qemu-system-x86_64 \
   -net nic \
   -net user \
   -nographic \
-  -object memory-backend-file,size=1M,share=on,mem-path=/dev/shm/ivshmem,id=hostmem \
+  -object memory-backend-file,size=4M,share=on,mem-path=/dev/shm/ivshmem,id=hostmem \
   $SHM_OPT \
   -virtfs local,path=./shared,security_model=passthrough,mount_tag=shared \
   -name $NAME

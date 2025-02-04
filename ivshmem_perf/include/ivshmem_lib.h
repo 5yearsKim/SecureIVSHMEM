@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#define IVSHMEM_RUNNING_OS 1  // 1: SHM, 2: QEMU_VM, 3: QEMU_HOST
+#define IVSHMEM_RUNNING_OS 2  // 1: SHM, 2: QEMU_VM, 3: QEMU_HOST
 
 #if IVSHMEM_RUNNING_OS == 1  // SHM
 #define IVSHMEM_PCI_PATH "/dev/shm/mysharedmem"
@@ -45,8 +45,6 @@ struct IvshmemDeviceContext {
   int bar2_fd;
   void *p_shmem;
 
-  size_t shmem_size;
-
   /* used for doorbell mode */
   int io_fd;
   int epfds_irq[IVSHMEM_MAX_IRQ];
@@ -57,8 +55,6 @@ struct IvshmemDeviceContext {
 int get_vm_id();
 
 void ivshmem_init_dev_ctx(struct IvshmemDeviceContext *p_dev_ctx);
-
-uint32_t _ivshmem_get_shmem_size();
 
 int ivshmem_open_dev(struct IvshmemDeviceContext *p_dev_ctx);
 

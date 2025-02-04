@@ -100,7 +100,7 @@ int main(int argc, char **argv) {
     ret = ivshmem_lock_recv_buffer(&key, p_ctr_sec, recv_buf, MESSAGE_SIZE);
     if (ret != 0) {
       /* No new data available; sleep a bit before retrying */
-      usleep(10 * 1000);
+      sleep(1);
       continue;
     }
     total_bytes += MESSAGE_SIZE;

@@ -21,7 +21,6 @@ void ivshmem_init_dev_ctx(struct IvshmemDeviceContext *p_dev_ctx) {
   p_dev_ctx->p_reg = NULL;
   p_dev_ctx->bar2_fd = -1;
   p_dev_ctx->p_shmem = NULL;
-  p_dev_ctx->shmem_size = 0;
 
   p_dev_ctx->io_fd = -1;
 
@@ -30,25 +29,6 @@ void ivshmem_init_dev_ctx(struct IvshmemDeviceContext *p_dev_ctx) {
     p_dev_ctx->irq_data[i].fd = -1;
   }
   p_dev_ctx->is_opened = false;
-}
-
-uint32_t _ivshmem_get_shmem_size() {
-  uint64_t shm_size;
-  uint64_t tmp;
-  int cfg_fd;
-
-  cfg_fd = open(IVSHMEM_RESOURCE0_PATH, O_RDWR);
-  pread(cfg_fd, &tmp, 8, 0x18);
-
-  shm_size = ~0U;
-  pwrite(cfg_fd, &shm_size, 8, 0x18);
-  pread(cfg_fd, &shm_size, 8, 0x18);
-  pwrite(cfg_fd, &tmp, 8, 0x18);
-  shm_size &= (~0xfUL);
-  shm_size = (shm_size & ~(shm_size - 1));
-  close(cfg_fd);
-
-  return shm_size;
 }
 
 int ivshmem_open_dev(struct IvshmemDeviceContext *p_dev_ctx) {
@@ -91,9 +71,7 @@ int ivshmem_open_dev(struct IvshmemDeviceContext *p_dev_ctx) {
     printf("Failed to open %s\n", IVSHMEM_RESOURCE2_PATH);
     return -1;
   }
-  p_dev_ctx->shmem_size = _ivshmem_get_shmem_size();
-  printf("shmem_size %lu\n", p_dev_ctx->shmem_size);
-  p_dev_ctx->p_shmem = mmap(NULL, p_dev_ctx->shmem_size, PROT_READ | PROT_WRITE,
+  p_dev_ctx->p_shmem = mmap(NULL, IVSHMEM_SIZE, PROT_READ | PROT_WRITE,
                             MAP_SHARED, p_dev_ctx->bar2_fd, 0);
 
 #endif
@@ -143,7 +121,7 @@ void ivshmem_close_dev(struct IvshmemDeviceContext *p_dev_ctx) {
   }
 
   if (p_dev_ctx->p_shmem) {
-    munmap(p_dev_ctx->p_shmem, p_dev_ctx->shmem_size);
+    munmap(p_dev_ctx->p_shmem, IVSHMEM_SIZE);
     p_dev_ctx->p_shmem = NULL;
   }
 
