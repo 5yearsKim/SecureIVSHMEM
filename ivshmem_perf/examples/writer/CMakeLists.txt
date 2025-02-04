@@ -16,12 +16,15 @@ add_executable(writer
 )
 
 
-set(IVSHMEM_LOCK_LIB_SOURCES
+add_executable(lock_writer
+    lock_base_main.c
     ${CMAKE_SOURCE_DIR}/src/ivshmem_lib.c
     ${CMAKE_SOURCE_DIR}/src/ivshmem_lock_base.c
 )
 
-add_executable(lock_writer
-    lock_base_main.c
-    ${IVSHMEM_LOCK_LIB_SOURCES}
+add_executable(lock_init
+    lock_init.c
+    ${CMAKE_SOURCE_DIR}/src/ivshmem_lib.c
+    ${CMAKE_SOURCE_DIR}/src/ivshmem_lock_base.c
+
 )

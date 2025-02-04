@@ -93,7 +93,6 @@ int main(int argc, char **argv) {
 
   while (1) {
     /* Prepare the message:
-     * - The first 8 bytes hold the counter.
      * - The remainder is filled with a pattern (repeated byte equal to counter
      * % 256).
      */
@@ -113,8 +112,11 @@ int main(int argc, char **argv) {
     if (now - start_time >= 1) {
       double seconds = difftime(now, start_time);
       double mbps = (total_bytes / (1024.0 * 1024.0)) / seconds;
-      printf("Sent %lu messages, throughput = %.2f MB/s, last counter = %lu\n",
-             counter, mbps, counter);
+      printf(
+          "\r\033[KSent %lu messages, throughput = %.2f MB/s, last counter = "
+          "%lu",
+          counter, mbps, counter);
+      fflush(stdout);
       start_time = now;
       total_bytes = 0;
     }

@@ -72,12 +72,6 @@ int main(int argc, char **argv) {
   /* Map the lock-based control section (layout: [control section][data
    * section]) */
   p_ctr_sec = (struct IvshmemLockControlSection *)dev_ctx.p_shmem;
-  ret = ivshmem_lock_init_control_section(p_ctr_sec);
-  if (ret != 0) {
-    fprintf(stderr, "ivshmem_lock_init_control_section() failed\n");
-    ivshmem_close_dev(&dev_ctx);
-    exit(EXIT_FAILURE);
-  }
   p_data = ivshmem_lock_get_data_section(p_ctr_sec);
 
   /* Set up the key for the channel.
@@ -125,9 +119,10 @@ int main(int argc, char **argv) {
       double seconds = difftime(now, start_time);
       double mbps = (total_bytes / (1024.0 * 1024.0)) / seconds;
       printf(
-          "Lock Reader: Received messages, throughput = %.2f MB/s, last "
-          "counter = %lu\n",
+          "\r\033[KLock Reader: Received messages, throughput = %.2f MB/s, "
+          "last counter = %lu",
           mbps, received_counter);
+      fflush(stdout);
       start_time = now;
       total_bytes = 0;
     }

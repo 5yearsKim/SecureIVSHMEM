@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "ivshmem_lib.h"
 
@@ -26,6 +27,9 @@ void *ivshmem_lock_get_data_section(
 int ivshmem_lock_init_control_section(
     struct IvshmemLockControlSection *p_ctr_sec) {
   int ret;
+
+
+  // Initialize the mutex
   pthread_mutexattr_t attr;
 
   ret = pthread_mutexattr_init(&attr);
@@ -71,15 +75,21 @@ int ivshmem_lock_send_buffer(struct IvshmemLockKey *p_key,
   void *p_data = ivshmem_lock_get_data_section(p_ctr_sec);
 
   while (1) {
-    if ((p_ctr_sec->key.sender_pid != p_key->sender_pid) ||
-        (p_ctr_sec->ref_count > 0)) {
-      continue;
-    }
     if (data_sent >= size) {
       break;
     }
 
     size_t to_sent = MIN(size - data_sent, DATA_SECTION_SIZE);
+
+    if ((p_ctr_sec->ref_count > 0)) {
+      // struct IvshmemLockControlSection *p_ctr = p_ctr_sec;
+      // printf(
+      //     "waiting for data, ref_count: %d, sender_vm: %d, sender_pid: %d, "
+      //     "receiver_vm: %d \n",
+      //     p_ctr->ref_count, p_ctr->key.sender_vm, p_ctr->key.sender_pid,
+      //     p_ctr->key.receiver_vm);
+      continue;
+    }
 
     int ret = pthread_mutex_lock(&p_ctr_sec->mutex);
     if (ret != 0) {
@@ -96,11 +106,7 @@ int ivshmem_lock_send_buffer(struct IvshmemLockKey *p_key,
     p_ctr_sec->data_size = to_sent;
     p_ctr_sec->ref_count = 1;
 
-    ret = pthread_mutex_unlock(&p_ctr_sec->mutex);
-    if (ret != 0) {
-      perror("pthread_mutex_unlock");
-      return ret;
-    }
+    pthread_mutex_unlock(&p_ctr_sec->mutex);
   }
 
   return 0;
@@ -121,10 +127,6 @@ int ivshmem_lock_recv_buffer(struct IvshmemLockKey *p_key,
   int data_received = 0;
 
   while (1) {
-    if ((p_ctr->key.receiver_vm != p_key->receiver_vm) ||
-        p_ctr->ref_count <= 0) {
-      continue;
-    }
 
     if (data_received >= size) {
       break;
@@ -132,21 +134,30 @@ int ivshmem_lock_recv_buffer(struct IvshmemLockKey *p_key,
 
     int to_receive = MIN(size - data_received, DATA_SECTION_SIZE);
 
+    if ((p_ctr->key.receiver_vm != p_key->receiver_vm) ||
+        (p_ctr->key.sender_vm != p_key->sender_vm) ||
+        (p_key->sender_pid && (p_ctr->key.sender_pid != p_key->sender_pid))  ||
+        p_ctr->ref_count <= 0) {
+      // printf(
+      //     "waiting for data, ref_count: %d, sender_vm: %d, sender_pid: %d, "
+      //     "receiver_vm: %d \n",
+      //     p_ctr->ref_count, p_ctr->key.sender_vm, p_ctr->key.sender_pid,
+      //     p_ctr->key.receiver_vm);
+      continue;
+    }
+
+
     int ret = pthread_mutex_lock(&p_ctr->mutex);
     if (ret != 0) {
       perror("pthread_mutex_lock");
       return ret;
     }
 
-    memcpy((char*)p_buffer +data_received, p_data , to_receive);
+    memcpy((char *)p_buffer + data_received, p_data, to_receive);
     p_ctr->ref_count--;  // consume the message
     data_received += to_receive;
 
-    ret = pthread_mutex_unlock(&p_ctr->mutex);
-    if (ret != 0) {
-      perror("pthread_mutex_unlock");
-      return ret;
-    }
+    pthread_mutex_unlock(&p_ctr->mutex);
   }
   return 0;
 }

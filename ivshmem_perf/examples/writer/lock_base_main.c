@@ -5,7 +5,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 #include <unistd.h>
 
 #include "ivshmem_lib.h"
@@ -73,12 +72,15 @@ int main(int argc, char **argv) {
    * be: [ IvshmemLockControlSection ][ data section ]
    */
   p_ctr_sec = (struct IvshmemLockControlSection *)dev_ctx.p_shmem;
-  ret = ivshmem_lock_init_control_section(p_ctr_sec);
-  if (ret != 0) {
-    fprintf(stderr, "ivshmem_lock_init_control_section() failed\n");
-    ivshmem_close_dev(&dev_ctx);
-    exit(EXIT_FAILURE);
-  }
+
+  // // init should be called on reader
+  // ret = ivshmem_lock_init_control_section(p_ctr_sec);
+  // if (ret != 0) {
+  //   fprintf(stderr, "ivshmem_lock_init_control_section() failed\n");
+  //   ivshmem_close_dev(&dev_ctx);
+  //   exit(EXIT_FAILURE);
+  // }
+
   p_data = ivshmem_lock_get_data_section(p_ctr_sec);
 
   /* Set up the key for the channel.
@@ -106,14 +108,13 @@ int main(int argc, char **argv) {
 
   while (1) {
     /* Prepare the message:
-     * - The first 8 bytes hold the counter.
      * - The remainder is filled with a repeated byte pattern equal to counter %
      * 256.
      */
     memcpy(send_buf, &counter, sizeof(counter));
     memset(send_buf + sizeof(counter), (char)(counter % 256),
            MESSAGE_SIZE - sizeof(counter));
-    
+
     ret = ivshmem_lock_send_buffer(&key, p_ctr_sec, send_buf, MESSAGE_SIZE);
     if (ret != 0) {
       fprintf(stderr, "ivshmem_lock_send_buffer() failed\n");
@@ -126,9 +127,11 @@ int main(int argc, char **argv) {
       double seconds = difftime(now, start_time);
       double mbps = (total_bytes / (1024.0 * 1024.0)) / seconds;
       printf(
-          "Lock Writer: Sent messages, throughput = %.2f MB/s, last counter = "
-          "%lu\n",
+          "\r\033[KLock Writer: Sent messages, throughput = %.2f MB/s, last "
+          "counter = %lu",
           mbps, counter);
+      fflush(stdout);
+
       start_time = now;
       total_bytes = 0;
     }

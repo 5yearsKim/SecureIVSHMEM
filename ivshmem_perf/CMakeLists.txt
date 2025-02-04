@@ -18,6 +18,9 @@ set_target_properties(writer PROPERTIES
 set_target_properties(lock_writer PROPERTIES 
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/writer"
 )
+set_target_properties(lock_init PROPERTIES 
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/writer"
+)
 
 add_subdirectory(examples/reader)
 set_target_properties(reader PROPERTIES 

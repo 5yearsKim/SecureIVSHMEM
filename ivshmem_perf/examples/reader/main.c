@@ -129,8 +129,11 @@ int main(int argc, char **argv) {
     if (now - start_time >= 1) {
       double seconds = difftime(now, start_time);
       double mbps = (total_bytes / (1024.0 * 1024.0)) / seconds;
-      printf("Received messages, throughput = %.2f MB/s, last counter = %lu\n",
-             mbps, received_counter);
+      printf(
+          "\r\033[KReceived messages, throughput = %.2f MB/s, last counter = "
+          "%lu",
+          mbps, received_counter);
+      fflush(stdout);
       start_time = now;
       total_bytes = 0;
     }

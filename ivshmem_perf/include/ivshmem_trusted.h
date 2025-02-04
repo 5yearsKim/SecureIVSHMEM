@@ -9,7 +9,7 @@
 /* Kill a channel if it is inactive for this many seconds */
 #define IVSHMEM_CHANNEL_KILL_THRESHOLD 5
 /* Rebalance interval in milliseconds */
-#define IVSHMEM_CHANNEL_REBALANCE_INTERVAL (5 * 1000)
+#define IVSHMEM_CHANNEL_REBALANCE_INTERVAL (8 * 1000)
 /* Initial channel buffer size */
 #define IVSHMEM_CHANNEL_INIT_SIZE (10 * 1024)
 
