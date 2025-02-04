@@ -11,16 +11,20 @@
 #include "ivshmem_data.h"
 #include "ivshmem_lib.h"
 
-#define MESSAGE_SIZE (256 * 1024 * 1024) /* Must match writer's MESSAGE_SIZE */
+#define MESSAGE_SIZE                                      \
+  (256 * 1024 * 1024) /* Must match writer's MESSAGE_SIZE \
+                       */
 
 /* Default values if arguments are not provided */
-#define DEFAULT_SENDER_VM   1
+#define DEFAULT_SENDER_VM 1
 #define DEFAULT_RECEIVER_VM 2
 
 static void print_usage(const char *progname) {
-    printf("Usage: %s [--sender_vm <id>] [--receiver_vm <id>]\n", progname);
-    printf("  --sender_vm    Optional sender VM id (default %d)\n", DEFAULT_SENDER_VM);
-    printf("  --receiver_vm  Optional receiver VM id (default %d)\n", DEFAULT_RECEIVER_VM);
+  printf("Usage: %s [--sender_vm <id>] [--receiver_vm <id>]\n", progname);
+  printf("  --sender_vm    Optional sender VM id (default %d)\n",
+         DEFAULT_SENDER_VM);
+  printf("  --receiver_vm  Optional receiver VM id (default %d)\n",
+         DEFAULT_RECEIVER_VM);
 }
 
 int main(int argc, char **argv) {
@@ -35,13 +39,13 @@ int main(int argc, char **argv) {
   int opt;
   int option_index = 0;
   static struct option long_options[] = {
-      {"sender_vm",   required_argument, 0, 's'},
+      {"sender_vm", required_argument, 0, 's'},
       {"receiver_vm", required_argument, 0, 'r'},
-      {"help",        no_argument,       0, 'h'},
-      {0, 0, 0, 0}
-  };
+      {"help", no_argument, 0, 'h'},
+      {0, 0, 0, 0}};
 
-  while ((opt = getopt_long(argc, argv, "s:r:h", long_options, &option_index)) != -1) {
+  while ((opt = getopt_long(argc, argv, "s:r:h", long_options,
+                            &option_index)) != -1) {
     switch (opt) {
       case 's':
         sender_vm = (unsigned int)atoi(optarg);
@@ -75,19 +79,17 @@ int main(int argc, char **argv) {
    * Note: We set sender_pid = -1 to match any sender (since the reader
    * may not know the actual writer's PID).
    */
-  struct IvshmemChannelKey key = {
-      .sender_vm = sender_vm,
-      .sender_pid = -1, /* accept any sender PID */
-      .receiver_vm = receiver_vm
-  };
+  struct IvshmemChannelKey key = {.sender_vm = sender_vm,
+                                  .sender_pid = 0, /* accept any sender PID */
+                                  .receiver_vm = receiver_vm};
 
   struct IvshmemChannel *channel = ivshmem_find_channel(p_ctr, &key);
   if (channel == NULL) {
     fprintf(stderr, "Channel not found\n");
     exit(EXIT_FAILURE);
   }
-  printf("Channel found: buf_size = %zu, data_size = %zu\n",
-         channel->buf_size, channel->data_size);
+  printf("Channel found: buf_size = %zu, data_size = %zu\n", channel->buf_size,
+         channel->data_size);
 
   /* Allocate a buffer for the received message */
   char *recv_buf = malloc(MESSAGE_SIZE);
@@ -101,8 +103,9 @@ int main(int argc, char **argv) {
   time_t start_time = time(NULL);
 
   while (1) {
-    /* Call the receive function using the channel pointer and the data section pointer.
-     * This will copy MESSAGE_SIZE bytes from the shared memory into recv_buf.
+    /* Call the receive function using the channel pointer and the data section
+     * pointer. This will copy MESSAGE_SIZE bytes from the shared memory into
+     * recv_buf.
      */
     ret = ivshmem_recv_buffer(&key, p_ctr, recv_buf, MESSAGE_SIZE);
     if (ret != 0) {

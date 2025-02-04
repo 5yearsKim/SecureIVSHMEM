@@ -10,9 +10,9 @@
 #define DATA_SECTION_SIZE (IVSHMEM_SIZE - sizeof(struct IvshmemControlSection))
 
 struct IvshmemChannelKey {
-  int sender_vm;
-  int sender_pid;
-  int receiver_vm;
+  uint32_t sender_vm;
+  uint32_t sender_pid;
+  uint32_t receiver_vm;
 };
 
 struct IvshmemChannel {

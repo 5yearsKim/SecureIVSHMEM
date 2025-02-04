@@ -3,10 +3,11 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 void *ivshmem_get_data_section(struct IvshmemControlSection *p_ctr_sec) {
-  return (void *)p_ctr_sec + sizeof(struct IvshmemControlSection);
+  return (void *)((char *)p_ctr_sec + sizeof(struct IvshmemControlSection));
 }
 
 struct IvshmemChannel *ivshmem_find_channel(
@@ -14,7 +15,7 @@ struct IvshmemChannel *ivshmem_find_channel(
   // Find the channel with the same key
   for (int i = 0; i < p_ctr_sec->num_active_channels; i++) {
     if (p_ctr_sec->channels[i].key.sender_vm == key->sender_vm &&
-        (key->sender_pid < 0 ||
+        (key->sender_pid == 0 ||
          p_ctr_sec->channels[i].key.sender_pid == key->sender_pid) &&
         p_ctr_sec->channels[i].key.receiver_vm == key->receiver_vm) {
       return &p_ctr_sec->channels[i];
@@ -56,14 +57,13 @@ int ivshmem_send_buffer(struct IvshmemChannelKey *p_key,
   // printf("Channel acquired: buf_size = %zu, data_size = %zu\n",
   //        p_chan->buf_size, p_chan->data_size);
 
-
   void *p_data = ivshmem_get_data_section(p_ctr);
 
   size_t data_sent = 0;
 
   while (1) {
     if (p_ctr->control_mutex != 0) {
-      continue; // wait for the control section to be free
+      continue;  // wait for the control section to be free
     }
 
     if (data_sent >= size) {
@@ -72,9 +72,10 @@ int ivshmem_send_buffer(struct IvshmemChannelKey *p_key,
     if (p_chan->ref_count > 0) {
       continue;
     }
-    int to_sent = MIN(size - data_sent, p_chan->buf_size);
+    size_t to_sent = MIN(size - data_sent, p_chan->buf_size);
 
-    memcpy((void *)((char *)p_data + p_chan->buf_offset), p_buffer, to_sent);
+    memcpy((char *)p_data + p_chan->buf_offset, (char *)p_buffer + data_sent,
+           to_sent);
     data_sent += to_sent;
 
     // update channel
@@ -91,19 +92,20 @@ int ivshmem_recv_buffer(struct IvshmemChannelKey *p_key,
                         size_t size) {
   struct IvshmemChannel *channel = ivshmem_find_channel(p_ctr, p_key);
   if (channel == NULL) {
-    fprintf(stderr, "Channel not found\n");
+    printf(" DEBUG: Channel not found\n");
+    printf("DEBUG: num active %d\n", p_ctr->num_active_channels);
     return -1;
   }
-  // printf("Channel found: buf_size = %zu, data_size = %zu\n", channel->buf_size,
+  // printf("Channel found: buf_size = %zu, data_size = %zu\n",
+  // channel->buf_size,
   //        channel->data_size);
 
   void *p_data = ivshmem_get_data_section(p_ctr);
   int data_received = 0;
 
   while (1) {
-
     if (p_ctr->control_mutex != 0) {
-      continue; // wait for the control section to be free
+      continue;  // wait for the control section to be free
     }
 
     if (channel->ref_count == 0) {
@@ -115,8 +117,8 @@ int ivshmem_recv_buffer(struct IvshmemChannelKey *p_key,
     }
     int to_receive = MIN(size - data_received, channel->data_size);
 
-    memcpy(p_buffer, (void *)((char *)p_data + channel->buf_offset),
-           to_receive);
+    memcpy((char *)p_buffer + data_received,
+           ((char *)p_data + channel->buf_offset), to_receive);
     data_received += to_receive;
 
     // update channel

@@ -8,10 +8,11 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "ivshmem_data.h"
 #include "ivshmem_lib.h"
+#include "ivshmem_lock_base.h"
 
-#define MESSAGE_SIZE (256 * 1024 * 1024) /* Size of each message in bytes */
+/* Message size set to 256 MB (must match the reader) */
+#define MESSAGE_SIZE (256 * 1024 * 1024)
 
 /* Default VM IDs if not provided by the user */
 #define DEFAULT_SENDER_VM 1
@@ -28,11 +29,11 @@ static void print_usage(const char *progname) {
 int main(int argc, char **argv) {
   int ret;
   struct IvshmemDeviceContext dev_ctx;
-  struct IvshmemControlSection *p_ctr;
+  struct IvshmemLockControlSection *p_ctr_sec;
+  void *p_data;
   unsigned int sender_vm = DEFAULT_SENDER_VM;
   unsigned int receiver_vm = DEFAULT_RECEIVER_VM;
 
-  /* Parse command-line options */
   int opt;
   int option_index = 0;
   static struct option long_options[] = {
@@ -57,9 +58,10 @@ int main(int argc, char **argv) {
     }
   }
 
-  printf("Using sender_vm=%u, receiver_vm=%u\n", sender_vm, receiver_vm);
+  printf("Lock Writer: Using sender_vm=%u, receiver_vm=%u\n", sender_vm,
+         receiver_vm);
 
-  /* Initialize device context and open the device */
+  /* Initialize the device context and open the shared memory device */
   ivshmem_init_dev_ctx(&dev_ctx);
   ret = ivshmem_open_dev(&dev_ctx);
   if (ret != 0) {
@@ -67,23 +69,34 @@ int main(int argc, char **argv) {
     exit(EXIT_FAILURE);
   }
 
-  /* Get the control section pointer */
-  p_ctr = (struct IvshmemControlSection *)dev_ctx.p_shmem;
-
-  /*
-   * Create (or request) a channel.
-   * Here we use a key with:
-   *   sender_vm = <value from option>, sender_pid = current PID, receiver_vm =
-   * <value from option>.
+  /* Map the lock-based control section. The shared memory layout is assumed to
+   * be: [ IvshmemLockControlSection ][ data section ]
    */
-  struct IvshmemChannelKey key = {.sender_vm = sender_vm,
-                                  .sender_pid = getpid(),
-                                  .receiver_vm = receiver_vm};
+  p_ctr_sec = (struct IvshmemLockControlSection *)dev_ctx.p_shmem;
+  ret = ivshmem_lock_init_control_section(p_ctr_sec);
+  if (ret != 0) {
+    fprintf(stderr, "ivshmem_lock_init_control_section() failed\n");
+    ivshmem_close_dev(&dev_ctx);
+    exit(EXIT_FAILURE);
+  }
+  p_data = ivshmem_lock_get_data_section(p_ctr_sec);
 
-  /* Allocate a buffer to send the message */
+  /* Set up the key for the channel.
+   * (For the lock-based API the control section carries a key.
+   * Here we set it to the same sender_vm and receiver_vm values,
+   * and use the current process’s PID for sender_pid.)
+   */
+  struct IvshmemLockKey key;
+  key.sender_vm = sender_vm;
+  key.sender_pid = getpid();
+  key.receiver_vm = receiver_vm;
+  p_ctr_sec->key = key;
+
+  /* Allocate the buffer for the message */
   char *send_buf = malloc(MESSAGE_SIZE);
-  if (send_buf == NULL) {
+  if (!send_buf) {
     perror("malloc");
+    ivshmem_close_dev(&dev_ctx);
     exit(EXIT_FAILURE);
   }
 
@@ -94,27 +107,28 @@ int main(int argc, char **argv) {
   while (1) {
     /* Prepare the message:
      * - The first 8 bytes hold the counter.
-     * - The remainder is filled with a pattern (repeated byte equal to counter
-     * % 256).
+     * - The remainder is filled with a repeated byte pattern equal to counter %
+     * 256.
      */
     memcpy(send_buf, &counter, sizeof(counter));
     memset(send_buf + sizeof(counter), (char)(counter % 256),
            MESSAGE_SIZE - sizeof(counter));
-
-    ret = ivshmem_send_buffer(&key, p_ctr, send_buf, MESSAGE_SIZE);
+    
+    ret = ivshmem_lock_send_buffer(&key, p_ctr_sec, send_buf, MESSAGE_SIZE);
     if (ret != 0) {
-      fprintf(stderr, "ivshmem_send_buffer() failed\n");
+      fprintf(stderr, "ivshmem_lock_send_buffer() failed\n");
     }
     total_bytes += MESSAGE_SIZE;
     counter++;
 
-    /* Every second, print the throughput in MB/s */
     time_t now = time(NULL);
     if (now - start_time >= 1) {
       double seconds = difftime(now, start_time);
       double mbps = (total_bytes / (1024.0 * 1024.0)) / seconds;
-      printf("Sent %lu messages, throughput = %.2f MB/s, last counter = %lu\n",
-             counter, mbps, counter);
+      printf(
+          "Lock Writer: Sent messages, throughput = %.2f MB/s, last counter = "
+          "%lu\n",
+          mbps, counter);
       start_time = now;
       total_bytes = 0;
     }

@@ -8,10 +8,11 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "ivshmem_data.h"
 #include "ivshmem_lib.h"
+#include "ivshmem_lock_base.h"
 
-#define MESSAGE_SIZE (256 * 1024 * 1024) /* Size of each message in bytes */
+/* Message size set to 256 MB (must match the writer) */
+#define MESSAGE_SIZE (256 * 1024 * 1024)
 
 /* Default VM IDs if not provided by the user */
 #define DEFAULT_SENDER_VM 1
@@ -28,11 +29,11 @@ static void print_usage(const char *progname) {
 int main(int argc, char **argv) {
   int ret;
   struct IvshmemDeviceContext dev_ctx;
-  struct IvshmemControlSection *p_ctr;
+  struct IvshmemLockControlSection *p_ctr_sec;
+  void *p_data;
   unsigned int sender_vm = DEFAULT_SENDER_VM;
   unsigned int receiver_vm = DEFAULT_RECEIVER_VM;
 
-  /* Parse command-line options */
   int opt;
   int option_index = 0;
   static struct option long_options[] = {
@@ -57,9 +58,10 @@ int main(int argc, char **argv) {
     }
   }
 
-  printf("Using sender_vm=%u, receiver_vm=%u\n", sender_vm, receiver_vm);
+  printf("Lock Reader: Using sender_vm=%u, receiver_vm=%u\n", sender_vm,
+         receiver_vm);
 
-  /* Initialize device context and open the device */
+  /* Initialize the device context and open the shared memory device */
   ivshmem_init_dev_ctx(&dev_ctx);
   ret = ivshmem_open_dev(&dev_ctx);
   if (ret != 0) {
@@ -67,60 +69,71 @@ int main(int argc, char **argv) {
     exit(EXIT_FAILURE);
   }
 
-  /* Get the control section pointer */
-  p_ctr = (struct IvshmemControlSection *)dev_ctx.p_shmem;
+  /* Map the lock-based control section (layout: [control section][data
+   * section]) */
+  p_ctr_sec = (struct IvshmemLockControlSection *)dev_ctx.p_shmem;
+  ret = ivshmem_lock_init_control_section(p_ctr_sec);
+  if (ret != 0) {
+    fprintf(stderr, "ivshmem_lock_init_control_section() failed\n");
+    ivshmem_close_dev(&dev_ctx);
+    exit(EXIT_FAILURE);
+  }
+  p_data = ivshmem_lock_get_data_section(p_ctr_sec);
 
-  /*
-   * Create (or request) a channel.
-   * Here we use a key with:
-   *   sender_vm = <value from option>, sender_pid = current PID, receiver_vm =
-   * <value from option>.
+  /* Set up the key for the channel.
+   * For the reader we use sender_pid = -1 to accept messages regardless of the
+   * writer’s PID. We also ensure that the control section’s receiver_vm is set.
    */
-  struct IvshmemChannelKey key = {.sender_vm = sender_vm,
-                                  .sender_pid = getpid(),
-                                  .receiver_vm = receiver_vm};
+  struct IvshmemLockKey key;
+  key.sender_vm = sender_vm;
+  key.sender_pid = 0; /* accept any sender PID */
+  key.receiver_vm = receiver_vm;
+  p_ctr_sec->key.receiver_vm = receiver_vm;
 
-  /* Allocate a buffer to send the message */
-  char *send_buf = malloc(MESSAGE_SIZE);
-  if (send_buf == NULL) {
+  /* Allocate a buffer for receiving the message */
+  char *recv_buf = malloc(MESSAGE_SIZE);
+  if (!recv_buf) {
     perror("malloc");
+    ivshmem_close_dev(&dev_ctx);
     exit(EXIT_FAILURE);
   }
 
-  unsigned long counter = 0;
+  unsigned long expected_counter = 0;
   size_t total_bytes = 0;
   time_t start_time = time(NULL);
 
   while (1) {
-    /* Prepare the message:
-     * - The first 8 bytes hold the counter.
-     * - The remainder is filled with a pattern (repeated byte equal to counter
-     * % 256).
-     */
-    memcpy(send_buf, &counter, sizeof(counter));
-    memset(send_buf + sizeof(counter), (char)(counter % 256),
-           MESSAGE_SIZE - sizeof(counter));
-
-    ret = ivshmem_send_buffer(&key, p_ctr, send_buf, MESSAGE_SIZE);
+    ret = ivshmem_lock_recv_buffer(&key, p_ctr_sec, recv_buf, MESSAGE_SIZE);
     if (ret != 0) {
-      fprintf(stderr, "ivshmem_send_buffer() failed\n");
+      /* No new data available; sleep a bit before retrying */
+      usleep(10 * 1000);
+      continue;
     }
     total_bytes += MESSAGE_SIZE;
-    counter++;
 
-    /* Every second, print the throughput in MB/s */
+    /* Verify the message by reading the counter from the first 8 bytes */
+    unsigned long received_counter = 0;
+    memcpy(&received_counter, recv_buf, sizeof(received_counter));
+    if (received_counter != expected_counter) {
+      fprintf(stderr, "Lock Reader: Data mismatch: expected %lu, got %lu\n",
+              expected_counter, received_counter);
+    }
+    expected_counter++;
+
     time_t now = time(NULL);
     if (now - start_time >= 1) {
       double seconds = difftime(now, start_time);
       double mbps = (total_bytes / (1024.0 * 1024.0)) / seconds;
-      printf("Sent %lu messages, throughput = %.2f MB/s, last counter = %lu\n",
-             counter, mbps, counter);
+      printf(
+          "Lock Reader: Received messages, throughput = %.2f MB/s, last "
+          "counter = %lu\n",
+          mbps, received_counter);
       start_time = now;
       total_bytes = 0;
     }
   }
 
-  free(send_buf);
+  free(recv_buf);
   ivshmem_close_dev(&dev_ctx);
   return 0;
 }

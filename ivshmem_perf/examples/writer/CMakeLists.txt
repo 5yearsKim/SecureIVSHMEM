@@ -15,3 +15,13 @@ add_executable(writer
     ${IVSHMEM_LIB_SOURCES}
 )
 
+
+set(IVSHMEM_LOCK_LIB_SOURCES
+    ${CMAKE_SOURCE_DIR}/src/ivshmem_lib.c
+    ${CMAKE_SOURCE_DIR}/src/ivshmem_lock_base.c
+)
+
+add_executable(lock_writer
+    lock_base_main.c
+    ${IVSHMEM_LOCK_LIB_SOURCES}
+)

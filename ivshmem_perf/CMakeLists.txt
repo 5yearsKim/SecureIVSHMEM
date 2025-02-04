@@ -15,9 +15,15 @@ add_subdirectory(examples/writer)
 set_target_properties(writer PROPERTIES 
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/writer"
 )
+set_target_properties(lock_writer PROPERTIES 
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/writer"
+)
 
 add_subdirectory(examples/reader)
 set_target_properties(reader PROPERTIES 
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/reader"
+)
+set_target_properties(lock_reader PROPERTIES 
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/reader"
 )
 
