@@ -3,17 +3,20 @@
 
 #include <stdbool.h>
 
-#include "ivshmem_data.h"
+#include "ivshmem_secure.h"
 #include "ivshmem_lib.h"
 
 /* Kill a channel if it is inactive for this many seconds */
 #define IVSHMEM_CHANNEL_KILL_THRESHOLD 5
 /* Rebalance interval in milliseconds */
-#define IVSHMEM_CHANNEL_REBALANCE_INTERVAL (8 * 1000)
-/* Initial channel buffer size */
-#define IVSHMEM_CHANNEL_INIT_SIZE (10 * 1024)
+#define IVSHMEM_CHANNEL_REBALANCE_INTERVAL (10 * 1000)
 
-#define IVSHMEM_CHANNEL_ADD_VALUE (10 * 1024)
+
+
+/* Initial channel buffer size */
+#define IVSHMEM_CHANNEL_INIT_SIZE (4 * IVSHMEM_PAGE_SIZE)
+
+#define IVSHMEM_CHANNEL_ADD_VALUE (1 * IVSHMEM_PAGE_SIZE)
 
 #define IVSHMEM_CHANNEL_DECREASE_MULTIPLIER 0.8
 

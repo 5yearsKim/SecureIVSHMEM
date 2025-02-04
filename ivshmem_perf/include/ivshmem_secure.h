@@ -1,5 +1,5 @@
-#ifndef __IVSHMEM_DATA_H__
-#define __IVSHMEM_DATA_H__
+#ifndef __IVSHMEM_SECURE_H__
+#define __IVSHMEM_SECURE_H__
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -8,6 +8,7 @@
 
 #define IVSHMEM_MAX_CHANNELS 32
 #define DATA_SECTION_SIZE (IVSHMEM_SIZE - sizeof(struct IvshmemControlSection))
+#define IVSHMEM_PAGE_SIZE 4 * 1024
 
 struct IvshmemChannelKey {
   uint32_t sender_vm;
@@ -21,6 +22,12 @@ struct IvshmemChannel {
   size_t buf_offset;   /* offset within the data section */
   size_t buf_size;     /* allocated size in bytes */
   size_t data_size;    /* actual data size in bytes */
+
+  uint32_t tail;      /* tail idx */  
+  uint32_t head;    /* head idx */
+  int max_page;  /* max num page */
+  int head_touch; /* number of head touch */
+
   int ref_count;       /* usage count / if data is consumed */
   int sent_count;      /* number of sent messages in rebalancing interval */
   time_t last_sent_at; /* last sent time */
@@ -60,4 +67,4 @@ int ivshmem_recv_buffer(struct IvshmemChannelKey *p_key,
                         struct IvshmemControlSection *p_ctr, void *p_buffer,
                         size_t size);
 
-#endif
+#endif // __IVSHMEM_SECURE_H__
