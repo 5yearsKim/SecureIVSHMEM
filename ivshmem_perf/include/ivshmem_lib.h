@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#define IVSHMEM_RUNNING_OS 2  // 1: SHM, 2: QEMU_VM, 3: QEMU_HOST
+#define IVSHMEM_RUNNING_OS 1  // 1: SHM, 2: QEMU_VM, 3: QEMU_HOST
 
 #if IVSHMEM_RUNNING_OS == 1  // SHM
 #define IVSHMEM_PCI_PATH "/dev/shm/mysharedmem"
@@ -30,7 +30,6 @@
 #define IVSHMEM_BAR0_SIZE 256
 
 #define IVSHMEM_SIZE (4 * 1024 * 1024)
-
 
 struct IvshmemIrqData {
   int fd;

@@ -22,8 +22,8 @@ struct IvshmemLockKey {
  * CHANNEL_BUF_SIZE). The mutex is process‐shared.
  */
 struct IvshmemLockControlSection {
-  int ref_count;             /* 0 = no new data, >0 means new data available */
-  pthread_mutex_t mutex;     /* Process-shared mutex */
+  int ref_count;         /* 0 = no new data, >0 means new data available */
+  pthread_mutex_t mutex; /* Process-shared mutex */
 
   struct IvshmemLockKey key; /* Key for this channel */
   size_t data_size; /* Number of bytes currently stored in the data region */

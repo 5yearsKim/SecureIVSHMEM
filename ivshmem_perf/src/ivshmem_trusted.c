@@ -37,6 +37,25 @@ int ivshmem_trusted_rebalancing(struct IvshmemControlSection *p_ctr_sec,
 
   time_t now = time(NULL);
 
+
+  size_t allocated_buffer_size =
+      (DATA_SECTION_SIZE - IVSHMEM_CHANNEL_INIT_SIZE - 1) /
+      p_ctr_sec->num_active_channels;
+
+#if IVSHMEM_TYPE == 2
+  // allocated_buffer_size should be multiple of IVSHMEM_PAGE_SIZE
+  int num_page = allocated_buffer_size / IVSHMEM_PAGE_SIZE;
+  allocated_buffer_size = num_page * IVSHMEM_PAGE_SIZE;
+#endif
+
+
+  if (allocated_buffer_size == p_ctr_sec->channels[0].buf_size) {
+    // no change in buffer size
+    printf("No change in buffer size, skipping rebalancing..\n");
+    p_ctr_sec->control_mutex = 0;  // Unlock the control section
+    return 0;
+  }
+
   struct IvshmemChannel *p_chan_tmp =
       malloc(sizeof(struct IvshmemChannel) * p_ctr_sec->num_active_channels);
   if (p_chan_tmp == NULL) {
@@ -47,28 +66,32 @@ int ivshmem_trusted_rebalancing(struct IvshmemControlSection *p_ctr_sec,
          sizeof(struct IvshmemChannel) * p_ctr_sec->num_active_channels);
 
   p_ctr_sec->free_start_offset = 0;
-  size_t allocated_buffer_size =
-      (DATA_SECTION_SIZE - IVSHMEM_CHANNEL_INIT_SIZE - 1) /
-      p_ctr_sec->num_active_channels;
+
+
 
   int cnt = 0;
   for (unsigned int i = 0; i < p_ctr_sec->num_active_channels; i++) {
     struct IvshmemChannel *p_chan = &p_chan_tmp[i];
 
-    /* If the channel has been inactive too long, kill it */
-    if (p_chan->sent_count == 0 &&
-        (now - p_chan->last_sent_at) > IVSHMEM_CHANNEL_KILL_THRESHOLD) {
-      printf("Killing inactive channel: sender_vm=%d, receiver_vm=%d\n",
-             p_chan->key.sender_vm, p_chan->key.receiver_vm);
-    } else {
-      p_ctr_sec->channels[cnt] = *p_chan;
-      p_ctr_sec->channels[cnt].buf_offset = p_ctr_sec->free_start_offset;
-      p_ctr_sec->channels[cnt].buf_size = allocated_buffer_size;
-      p_ctr_sec->channels[cnt].sent_count = 0;
+    p_ctr_sec->channels[cnt] = *p_chan;
+    p_ctr_sec->channels[cnt].buf_offset = p_ctr_sec->free_start_offset;
+    p_ctr_sec->channels[cnt].buf_size = allocated_buffer_size;
+    printf("alllocating buffer size %zu to index %d\n", p_ctr_sec->channels[cnt].buf_size, cnt);
+    p_ctr_sec->free_start_offset += allocated_buffer_size;
 
-      p_ctr_sec->free_start_offset += allocated_buffer_size;
-      cnt++;
-    }
+#if IVSHMEM_TYPE == 1
+    p_ctr_sec->channels[cnt].sent_count = 0;
+#elif IVSHMEM_TYPE == 2
+
+    p_ctr_sec->channels[cnt].tail = p_chan->tail % num_page;
+    p_ctr_sec->channels[cnt].head = p_chan->head % num_page;
+    p_ctr_sec->channels[cnt].num_page = num_page;
+    p_ctr_sec->channels[cnt].head_touch = 0;
+#else
+#error "Invalid IVSHMEM_TYPE"
+#endif
+
+    cnt++;
   }
   p_ctr_sec->num_active_channels = cnt;
   memset(&p_ctr_sec->channels[cnt], 0,
@@ -128,17 +151,10 @@ int ivshmem_create_channel(struct IvshmemControlSection *p_ctr_sec,
   struct IvshmemChannel *new_channel =
       &p_ctr_sec->channels[p_ctr_sec->num_active_channels];
 
-  ivshmem_init_channel(p_ctr_sec->last_channel_id, new_channel, p_key);
-  p_ctr_sec->last_channel_id++;
-
-  new_channel->buf_offset = p_ctr_sec->free_start_offset;
-  new_channel->buf_size = IVSHMEM_CHANNEL_INIT_SIZE;
-  new_channel->data_size = 0;
-  new_channel->ref_count = 0;
-  new_channel->sent_count = 0;
-  new_channel->last_sent_at = time(NULL);
+  ivshmem_init_channel(p_ctr_sec, new_channel, p_key);
 
   /* Update control section */
+  p_ctr_sec->last_channel_id++;
   p_ctr_sec->free_start_offset += IVSHMEM_CHANNEL_INIT_SIZE;
   p_ctr_sec->num_active_channels++;
 
@@ -156,6 +172,8 @@ struct IvshmemChannel *ivshmem_find_or_create_channel(
   if (ivshmem_create_channel(p_ctr_sec, key) != 0) {
     return NULL;
   }
+
+
   /* Return the newly created channel (the last in the channels array) */
   return &p_ctr_sec->channels[p_ctr_sec->num_active_channels - 1];
 }
@@ -163,16 +181,29 @@ struct IvshmemChannel *ivshmem_find_or_create_channel(
 /*
  * Initialize a channel with the provided key.
  */
-void ivshmem_init_channel(unsigned int id, struct IvshmemChannel *p_channel,
+void ivshmem_init_channel(struct IvshmemControlSection *p_ctr_sec,
+                          struct IvshmemChannel *p_channel,
                           struct IvshmemChannelKey *key) {
-  p_channel->id = id;
+  p_channel->id = p_ctr_sec->last_channel_id;
   p_channel->key.sender_vm = key->sender_vm;
   p_channel->key.sender_pid = key->sender_pid;
   p_channel->key.receiver_vm = key->receiver_vm;
-  p_channel->buf_offset = 0;
-  p_channel->buf_size = 0;
+
+  p_channel->buf_offset = p_ctr_sec->free_start_offset;
+  p_channel->buf_size = IVSHMEM_CHANNEL_INIT_SIZE;
   p_channel->data_size = 0;
+  p_channel->last_sent_at = time(NULL);
+
+#if IVSHMEM_TYPE == 1
   p_channel->ref_count = 0;
   p_channel->sent_count = 0;
+#elif IVSHMEM_TYPE == 2
+  p_channel->tail = 0;
+  p_channel->head = 0;
+  p_channel->num_page = IVSHMEM_CHANNEL_INIT_SIZE / IVSHMEM_PAGE_SIZE;
+  p_channel->head_touch = 0;
+#else
+#error "Invalid IVSHMEM_TYPE"
+#endif
   p_channel->last_sent_at = 0;
 }

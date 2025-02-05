@@ -28,7 +28,6 @@ int ivshmem_lock_init_control_section(
     struct IvshmemLockControlSection *p_ctr_sec) {
   int ret;
 
-
   // Initialize the mutex
   pthread_mutexattr_t attr;
 
@@ -127,7 +126,6 @@ int ivshmem_lock_recv_buffer(struct IvshmemLockKey *p_key,
   int data_received = 0;
 
   while (1) {
-
     if (data_received >= size) {
       break;
     }
@@ -136,7 +134,7 @@ int ivshmem_lock_recv_buffer(struct IvshmemLockKey *p_key,
 
     if ((p_ctr->key.receiver_vm != p_key->receiver_vm) ||
         (p_ctr->key.sender_vm != p_key->sender_vm) ||
-        (p_key->sender_pid && (p_ctr->key.sender_pid != p_key->sender_pid))  ||
+        (p_key->sender_pid && (p_ctr->key.sender_pid != p_key->sender_pid)) ||
         p_ctr->ref_count <= 0) {
       // printf(
       //     "waiting for data, ref_count: %d, sender_vm: %d, sender_pid: %d, "
@@ -145,7 +143,6 @@ int ivshmem_lock_recv_buffer(struct IvshmemLockKey *p_key,
       //     p_ctr->key.receiver_vm);
       continue;
     }
-
 
     int ret = pthread_mutex_lock(&p_ctr->mutex);
     if (ret != 0) {
