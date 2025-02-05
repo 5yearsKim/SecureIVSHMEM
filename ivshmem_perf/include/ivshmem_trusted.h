@@ -3,15 +3,13 @@
 
 #include <stdbool.h>
 
-#include "ivshmem_secure.h"
 #include "ivshmem_lib.h"
+#include "ivshmem_secure.h"
 
 /* Kill a channel if it is inactive for this many seconds */
 #define IVSHMEM_CHANNEL_KILL_THRESHOLD 5
 /* Rebalance interval in milliseconds */
 #define IVSHMEM_CHANNEL_REBALANCE_INTERVAL (10 * 1000)
-
-
 
 /* Initial channel buffer size */
 #define IVSHMEM_CHANNEL_INIT_SIZE (4 * IVSHMEM_PAGE_SIZE)
@@ -52,7 +50,8 @@ struct IvshmemChannel *ivshmem_find_or_create_channel(
     struct IvshmemControlSection *p_ctr_sec, struct IvshmemChannelKey *key);
 
 /* Initialize a new channel instance with the provided key. */
-void ivshmem_init_channel(unsigned int id, struct IvshmemChannel *p_channel,
+void ivshmem_init_channel(struct IvshmemControlSection *p_ctr_sec,
+                          struct IvshmemChannel *p_channel,
                           struct IvshmemChannelKey *key);
 
 #endif /* __IVSHMEM_TRUSTED__ */

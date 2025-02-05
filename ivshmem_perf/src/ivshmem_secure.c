@@ -59,6 +59,7 @@ int ivshmem_send_buffer(struct IvshmemChannelKey *p_key,
 
   void *p_data = ivshmem_get_data_section(p_ctr);
 
+#if IVSHMEM_TYPE == 1
   size_t data_sent = 0;
 
   while (1) {
@@ -69,6 +70,7 @@ int ivshmem_send_buffer(struct IvshmemChannelKey *p_key,
     if (data_sent >= size) {
       break;
     }
+
     if (p_chan->ref_count > 0) {
       continue;
     }
@@ -84,6 +86,42 @@ int ivshmem_send_buffer(struct IvshmemChannelKey *p_key,
     p_chan->last_sent_at = time(NULL);
   }
 
+#elif IVSHMEM_TYPE == 2
+  size_t data_sent = 0;
+
+  while (1) {
+    if (p_ctr->control_mutex != 0) {
+      continue;  // wait for the control section to be free
+    }
+
+    if (data_sent >= size) {
+      break;
+    }
+
+    // check if the channel is full
+    if (p_chan->head == p_chan->tail - 1 ||
+        (p_chan->head == p_chan->num_page - 1 && p_chan->tail == 0)) {
+      continue;
+    }
+
+
+    size_t to_sent = MIN(size - IVSHMEM_PAGE_SIZE, IVSHMEM_PAGE_SIZE);
+
+    memcpy((char *)p_data + p_chan->buf_offset +
+               (p_chan->head * IVSHMEM_PAGE_SIZE),
+           (char *)p_buffer + data_sent, to_sent);
+
+    p_chan->head = (p_chan->head + 1) % p_chan->num_page;
+
+    data_sent += to_sent;
+    p_chan->data_size += to_sent;
+    p_chan->last_sent_at = time(NULL);
+  }
+
+#else
+#error "Invalid IVSHMEM_TYPE"
+#endif
+
   return 0;
 }
 
@@ -93,7 +131,6 @@ int ivshmem_recv_buffer(struct IvshmemChannelKey *p_key,
   struct IvshmemChannel *channel = ivshmem_find_channel(p_ctr, p_key);
   if (channel == NULL) {
     printf(" DEBUG: Channel not found\n");
-    printf("DEBUG: num active %d\n", p_ctr->num_active_channels);
     return -1;
   }
   // printf("Channel found: buf_size = %zu, data_size = %zu\n",
@@ -101,6 +138,8 @@ int ivshmem_recv_buffer(struct IvshmemChannelKey *p_key,
   //        channel->data_size);
 
   void *p_data = ivshmem_get_data_section(p_ctr);
+
+#if IVSHMEM_TYPE == 1
   int data_received = 0;
 
   while (1) {
@@ -125,6 +164,39 @@ int ivshmem_recv_buffer(struct IvshmemChannelKey *p_key,
     channel->data_size = 0;
     channel->ref_count--;
   }
+
+#elif IVSHMEM_TYPE == 2
+  int data_received = 0;
+
+  while (1) {
+    if (p_ctr->control_mutex != 0) {
+      continue;  // wait for the control section to be free
+    }
+
+    if (channel->head == channel->tail) {
+      continue;
+    }
+
+    if (data_received >= size) {
+      break;
+    }
+
+    int to_receive = MIN(size - data_received, IVSHMEM_PAGE_SIZE);
+
+
+    memcpy((char *)p_buffer + data_received,
+           ((char *)p_data + channel->buf_offset +
+            (channel->tail * IVSHMEM_PAGE_SIZE)),
+           to_receive);
+
+    channel->tail = (channel->tail + 1) % channel->num_page;
+    data_received += to_receive;
+    channel->data_size -= to_receive;
+  }
+
+#else
+#error "Invalid IVSHMEM_TYPE"
+#endif
 
   return 0;
 }

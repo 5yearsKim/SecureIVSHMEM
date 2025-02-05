@@ -6,17 +6,14 @@
 #include <string.h>
 #include <unistd.h>
 
-
 #include "ivshmem_lib.h"
 #include "ivshmem_lock_base.h"
 
-
 int main() {
-    int ret;
+  int ret;
   struct IvshmemDeviceContext dev_ctx;
   struct IvshmemLockControlSection *p_ctr_sec;
   void *p_data;
-
 
   /* Initialize the device context and open the shared memory device */
   ivshmem_init_dev_ctx(&dev_ctx);

@@ -8,8 +8,8 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "ivshmem_secure.h"
 #include "ivshmem_lib.h"
+#include "ivshmem_secure.h"
 
 #define MESSAGE_SIZE (256 * 1024 * 1024) /* Size of each message in bytes */
 
