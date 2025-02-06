@@ -1,0 +1,22 @@
+@startuml Channel Protocol
+skinparam participantStyle rectangle
+
+participant Receiver <<VM1>>
+participant "Trusted Host" as Host <<SOS>>
+participant "Target VM (Sender)" as Sender <<VM2>>
+
+Receiver -> Host: ivshmem_request_channel(target VM, pid)
+activate Host
+Host -> Sender: Forward channel request
+deactivate Host
+
+activate Sender
+Sender -> Host: ivshmem_accept_channel() [if accepted]
+deactivate Sender
+
+activate Host
+Host -> Host: Verify request and establish channel
+deactivate Host
+
+Sender -> Receiver: Begin data transmission using \nivshmem_send() / ivshmem_recv()
+@enduml
