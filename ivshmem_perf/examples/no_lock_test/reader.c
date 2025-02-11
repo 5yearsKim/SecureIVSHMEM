@@ -63,7 +63,6 @@ int main(int argc, char **argv) {
   size_t total_bytes = 0;
   time_t start_time = time(NULL);
 
-
   while (1) {
     /* Read the first byte from shared memory (our counter value) */
     int current = (int)(((unsigned char *)dev_ctx.p_shmem)[0]);
@@ -79,7 +78,7 @@ int main(int argc, char **argv) {
     memcpy(read_buf, dev_ctx.p_shmem, message_size);
 
     /* Verify that every byte in the local buffer equals the counter (current)
-      */
+     */
     int consistent = 1;
     for (size_t i = 0; i < (size_t)message_size; i++) {
       if (((unsigned char *)read_buf)[i] != (unsigned char)current) {
@@ -95,7 +94,7 @@ int main(int argc, char **argv) {
       printf("consistent\n");
     }
     /* (Optional) Handle inconsistency as needed. Here we simply continue
-      * polling. */
+     * polling. */
 
     total_bytes += message_size;
 

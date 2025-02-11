@@ -66,10 +66,8 @@ int main(int argc, char **argv) {
 
     memset(send_buf, (char)(counter % 256), message_size);
 
-
     /* Copy the prepared message to the shared memory region */
     memcpy(dev_ctx.p_shmem, send_buf, message_size);
-
 
     total_bytes += message_size;
     counter++;

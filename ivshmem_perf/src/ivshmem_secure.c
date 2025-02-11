@@ -85,8 +85,8 @@ int ivshmem_send_buffer(struct IvshmemChannelKey *p_key,
     // check if the channel is full
     if (p_chan->head == p_chan->tail - 1 ||
         (p_chan->head == p_chan->num_page - 1 && p_chan->tail == 0)) {
-      usleep(10 * 1000);
-      atomic_fetch_add(&p_chan->sender_itr, 1);
+      usleep(1 * 10);
+      p_chan->sender_itr++;
       continue;
     }
 
@@ -103,10 +103,12 @@ int ivshmem_send_buffer(struct IvshmemChannelKey *p_key,
 #endif
 
     data_sent += to_sent;
+
     atomic_fetch_add(&p_chan->data_size, to_sent);
+
     p_chan->last_sent_at = time(NULL);
 
-    atomic_fetch_add(&p_chan->sender_itr, 1);
+    p_chan->sender_itr++;
   }
 
   return 0;
@@ -128,7 +130,7 @@ int ivshmem_recv_buffer(struct IvshmemChannelKey *p_key,
 
   // manage interrupt
   while (p_chan->sender_itr == prev_itr) {
-    usleep(10 * 1000);
+    usleep(1 * 1000);
     continue;
   }
 
@@ -177,6 +179,7 @@ int ivshmem_recv_buffer(struct IvshmemChannelKey *p_key,
     p_chan->tail = (p_chan->tail + 1) % p_chan->num_page;
 
     data_received += to_receive;
+
     atomic_fetch_sub(&p_chan->data_size, to_receive);
 
 #else

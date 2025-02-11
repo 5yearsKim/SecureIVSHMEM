@@ -1,6 +1,5 @@
 #include "ivshmem_lock_base.h"
 
-#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,26 +28,7 @@ int ivshmem_lock_init_control_section(
   int ret;
 
   // Initialize the mutex
-  pthread_mutexattr_t attr;
-
-  ret = pthread_mutexattr_init(&attr);
-  if (ret != 0) {
-    perror("pthread_mutexattr_init");
-    return ret;
-  }
-  ret = pthread_mutexattr_setpshared(&attr, PTHREAD_PROCESS_SHARED);
-  if (ret != 0) {
-    perror("pthread_mutexattr_setpshared");
-    pthread_mutexattr_destroy(&attr);
-    return ret;
-  }
-  ret = pthread_mutex_init(&p_ctr_sec->mutex, &attr);
-  if (ret != 0) {
-    perror("pthread_mutex_init");
-    pthread_mutexattr_destroy(&attr);
-    return ret;
-  }
-  pthread_mutexattr_destroy(&attr);
+  p_ctr_sec->mutex = false;
 
   /* Initialize other fields */
   p_ctr_sec->key.sender_vm = 0;
@@ -90,11 +70,11 @@ int ivshmem_lock_send_buffer(struct IvshmemLockKey *p_key,
       continue;
     }
 
-    int ret = pthread_mutex_lock(&p_ctr_sec->mutex);
-    if (ret != 0) {
-      perror("pthread_mutex_lock");
-      return ret;
+    if (p_ctr_sec->mutex) {
+      continue;
     }
+
+    atomic_store(&p_ctr_sec->mutex, true);
 
     memcpy(p_data, (char *)p_buffer + data_sent, to_sent);
     data_sent += to_sent;
@@ -105,7 +85,7 @@ int ivshmem_lock_send_buffer(struct IvshmemLockKey *p_key,
     p_ctr_sec->data_size = to_sent;
     p_ctr_sec->ref_count = 1;
 
-    pthread_mutex_unlock(&p_ctr_sec->mutex);
+    atomic_store(&p_ctr_sec->mutex, false);
   }
 
   return 0;
@@ -144,17 +124,17 @@ int ivshmem_lock_recv_buffer(struct IvshmemLockKey *p_key,
       continue;
     }
 
-    int ret = pthread_mutex_lock(&p_ctr->mutex);
-    if (ret != 0) {
-      perror("pthread_mutex_lock");
-      return ret;
+    if (p_ctr->mutex) {
+      continue;
     }
+
+    atomic_store(&p_ctr->mutex, true);
 
     memcpy((char *)p_buffer + data_received, p_data, to_receive);
     p_ctr->ref_count--;  // consume the message
     data_received += to_receive;
 
-    pthread_mutex_unlock(&p_ctr->mutex);
+    atomic_store(&p_ctr->mutex, false);
   }
   return 0;
 }

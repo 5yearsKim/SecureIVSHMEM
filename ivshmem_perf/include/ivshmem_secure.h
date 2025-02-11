@@ -25,8 +25,8 @@ struct IvshmemChannel {
   size_t buf_offset;            /* offset within the data section */
   size_t buf_size;              /* allocated size in bytes */
   _Atomic size_t data_size;     /* actual data size in bytes */
-  _Atomic uint8_t sender_itr;   /* sender interrupt */
-  _Atomic uint8_t receiver_itr; /* receiver interrupt */
+  uint8_t sender_itr;   /* sender interrupt */
+  uint8_t receiver_itr; /* receiver interrupt */
 
 #if IVSHMEM_TYPE == 1
   int ref_count;  /* usage count / if data is consumed */
