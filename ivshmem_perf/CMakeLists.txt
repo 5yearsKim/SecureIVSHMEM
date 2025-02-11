@@ -11,6 +11,7 @@ set_target_properties(ivshmem-client PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/ivshmem_client"
 )
 
+# examples/writer
 add_subdirectory(examples/writer)
 set_target_properties(writer PROPERTIES 
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/writer"
@@ -22,6 +23,7 @@ set_target_properties(lock_init PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/writer"
 )
 
+# examples/reader
 add_subdirectory(examples/reader)
 set_target_properties(reader PROPERTIES 
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/reader"
@@ -29,6 +31,9 @@ set_target_properties(reader PROPERTIES
 set_target_properties(lock_reader PROPERTIES 
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/reader"
 )
+
+#  examples/no_lock_test
+add_subdirectory(examples/no_lock_test)
 
 # Set the ivshmem-client target's output directory
 
