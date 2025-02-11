@@ -1,6 +1,7 @@
 #ifndef __IVSHMEM_SECURE_H__
 #define __IVSHMEM_SECURE_H__
 
+#include <stdatomic.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -21,9 +22,11 @@ struct IvshmemChannelKey {
 struct IvshmemChannel {
   unsigned int id;
   struct IvshmemChannelKey key;
-  size_t buf_offset; /* offset within the data section */
-  size_t buf_size;   /* allocated size in bytes */
-  size_t data_size;  /* actual data size in bytes */
+  size_t buf_offset;            /* offset within the data section */
+  size_t buf_size;              /* allocated size in bytes */
+  _Atomic size_t data_size;     /* actual data size in bytes */
+  _Atomic uint8_t sender_itr;   /* sender interrupt */
+  _Atomic uint8_t receiver_itr; /* receiver interrupt */
 
 #if IVSHMEM_TYPE == 1
   int ref_count;  /* usage count / if data is consumed */
@@ -52,7 +55,7 @@ struct IvshmemControlSection {
   struct IvshmemChannel channels[IVSHMEM_MAX_CHANNELS];
 
   // /* A lock to protect controls/changes channels */
-  int control_mutex;
+  _Atomic uint8_t control_mutex;
   bool has_channel_candidate;
   struct IvshmemChannelKey channel_candidate;
 };

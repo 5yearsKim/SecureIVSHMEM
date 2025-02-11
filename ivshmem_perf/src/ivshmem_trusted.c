@@ -37,7 +37,6 @@ int ivshmem_trusted_rebalancing(struct IvshmemControlSection *p_ctr_sec,
 
   time_t now = time(NULL);
 
-
   size_t allocated_buffer_size =
       (DATA_SECTION_SIZE - IVSHMEM_CHANNEL_INIT_SIZE - 1) /
       p_ctr_sec->num_active_channels;
@@ -48,10 +47,7 @@ int ivshmem_trusted_rebalancing(struct IvshmemControlSection *p_ctr_sec,
   allocated_buffer_size = num_page * IVSHMEM_PAGE_SIZE;
 #endif
 
-
   if (allocated_buffer_size == p_ctr_sec->channels[0].buf_size) {
-    // no change in buffer size
-    printf("No change in buffer size, skipping rebalancing..\n");
     p_ctr_sec->control_mutex = 0;  // Unlock the control section
     return 0;
   }
@@ -67,8 +63,6 @@ int ivshmem_trusted_rebalancing(struct IvshmemControlSection *p_ctr_sec,
 
   p_ctr_sec->free_start_offset = 0;
 
-
-
   int cnt = 0;
   for (unsigned int i = 0; i < p_ctr_sec->num_active_channels; i++) {
     struct IvshmemChannel *p_chan = &p_chan_tmp[i];
@@ -76,7 +70,8 @@ int ivshmem_trusted_rebalancing(struct IvshmemControlSection *p_ctr_sec,
     p_ctr_sec->channels[cnt] = *p_chan;
     p_ctr_sec->channels[cnt].buf_offset = p_ctr_sec->free_start_offset;
     p_ctr_sec->channels[cnt].buf_size = allocated_buffer_size;
-    printf("alllocating buffer size %zu to index %d\n", p_ctr_sec->channels[cnt].buf_size, cnt);
+    printf("alllocating buffer size %zu to index %d\n",
+           p_ctr_sec->channels[cnt].buf_size, cnt);
     p_ctr_sec->free_start_offset += allocated_buffer_size;
 
 #if IVSHMEM_TYPE == 1
@@ -173,7 +168,6 @@ struct IvshmemChannel *ivshmem_find_or_create_channel(
     return NULL;
   }
 
-
   /* Return the newly created channel (the last in the channels array) */
   return &p_ctr_sec->channels[p_ctr_sec->num_active_channels - 1];
 }
@@ -192,6 +186,10 @@ void ivshmem_init_channel(struct IvshmemControlSection *p_ctr_sec,
   p_channel->buf_offset = p_ctr_sec->free_start_offset;
   p_channel->buf_size = IVSHMEM_CHANNEL_INIT_SIZE;
   p_channel->data_size = 0;
+
+  p_channel->sender_itr = 0;
+  p_channel->receiver_itr = 0;
+
   p_channel->last_sent_at = time(NULL);
 
 #if IVSHMEM_TYPE == 1
