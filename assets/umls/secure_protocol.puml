@@ -1,0 +1,43 @@
+@startuml Channel Protocol
+skinparam participantStyle rectangle
+skinparam defaultFontSize 24 
+
+
+participant "Service A (VM1)" as Client <<Client>>
+participant "Hypervisor" as Host <<Trusted Host>>
+participant "Service B (VM2)" as Server <<Server>>
+
+
+== Client Hello ==
+Client -> Host : Client Hello\n(Protocol version, extensions,\ncipher suites, client identity,\nnonce+timestamp for replay protection)
+
+== Trusted Host (Hypervisor) Hello ==
+Host -> Client : Trusted Host Hello\n(Certificate, supported cipher suites,\nextensions)
+note over Client,Host: Temporary channel established
+
+== Client Authentication and Challenge ==
+Client -> Host : Client Authentication & Challenge\n(Client certificate, signature over nonce,\nserver service ID)
+
+== Host Verification and Server Request ==
+Host -> Host : Validate client's certificate and challenge
+note over Host,Server: Temporary channel established
+Host -> Server : Forward connection request\n(Including client's nonce)
+
+== Server Hello ==
+Server -> Host : Server Hello\n(Server certificate, cryptographic challenge,\ncipher suites, acceptance of request)
+
+== Trusted Host Authorization and Channel Creation ==
+Host -> Host : Validate server's certificate and challenge
+note over Client,Server: Secure channel(between Server and Client) is created
+Host -> Client : Notify: Secure IVSHMEM channel created
+note over Client,Server: Temporary channels are deleted
+
+== Session Key Negotiation ==
+Client -> Server : Exchange ephemeral Diffie-Hellman values\n(Compute shared secret)
+Server -> Client : Acknowledge key exchange
+
+== Secure Data Transfer ==
+Client <-> Server : Encrypted data transfer
+
+
+@enduml
