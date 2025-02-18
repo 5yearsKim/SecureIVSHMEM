@@ -4,6 +4,8 @@
 % to be able to draw some self-contained figs
 \usepackage{tikz}
 \usetikzlibrary{positioning,calc,decorations}
+\usepackage{enumitem} % For more control over list formatting
+\usepackage{calc}     % For calculating widths if needed
 \usepackage{amsmath}
 
 % inlined bib file
@@ -161,7 +163,7 @@ eavesdropping
 
 blah blah blah
 
-\subsection{Performance Optimization}
+\subsection{Performance Mitigation}
 
 blah blah blah
 
@@ -174,18 +176,120 @@ blah blah blah
 
 
 
-\subsection{Service-based Channel division}
-blah blah blah
+\subsection{Service-based Channel Separation}
+
+Our design divides the IVSHMEM architecture into two primary sections: the \textbf{Control Section} and \textbf{the Data Section}. The Control Section is a fixed-size region where a trusted host stores dynamic configurations related to data allocation, while the Data Section is where virtual machines (VMs) actually read and write data through their assigned channels. Importantly, only the trusted host has permission to modify data in the Control Section, and each VM is restricted to reading and writing only to its designated channels within the Data Section.
+
+
+The \textbf{Data Section} comprises multiple channels, with each channel serving as a dedicated buffer space for a specific server and client service pair. For each pair, a dedicated channel is allocated, and the Control Section dynamically adjusts its size based on the activation of channels.
+
+For example, consider a scenario where Service A in VM1 needs to send data to Service B in VM2. In this case, the trusted host allocates an initial channel with a buffer size of 16 KB. The control information for this allocation is written into the Control Section, and only Service A and Service B are permitted to access the channel’s buffer. Additionally, the size of the channel buffer can be adjusted (enlarged or shrunk) based on the usage patterns between the services.
+
+An exception to this rule is the first channel in the Data Section. This channel is of a fixed size and is exclusively used for communication between the trusted host and the VMs—for instance, during the initial handshake when a VM sends data to the trusted host. All VMs have access to this channel.
+
+
+The \textbf{Control Section} maintains metadata about buffer assignments and channel usage. Its structure includes shared variables and an array of channel structures, which are described below:
+
+\begin{description}[leftmargin=0.5cm, labelindent=0cm]
+  \item[\textbf{free\_start\_offset} (int):] 
+    Points to the next available space for a new buffer allocation.
+  \item[\textbf{num\_active\_channel} (int):] 
+    Tracks the number of currently active channels.
+  \item[\textbf{control\_lock} (lock):] 
+    Ensures thread-safe modifications during resizing operations.
+  \item[\textbf{channels} (array of channel structures):] 
+    Holds metadata for each communication channel.
+    \begin{description}[leftmargin=0.5cm]
+      \item[\textbf{service\_id} (int):] 
+        The service ID as notified by the hypervisor.
+      \item[\textbf{client\_process\_id} (int):] 
+        An identifier used for granular access control.
+      \item[\textbf{server\_service\_id} (int):] 
+        The identifier for the server-side service.
+      \item[\textbf{server\_process\_id} (int):] 
+        The process identifier for the server.
+      \item[\textbf{data\_address} (pointer):] 
+        The address of the assigned channel buffer.
+      \item[\textbf{data\_size} (size):] 
+        The size of the assigned channel buffer.
+    \end{description}
+\end{description}
+
+Channels utilize the metadata provided in the Control Section to read from and write to the designated buffer regions.
+
 
 \subsection{Granualr Access Control}
 
-blah blah blah
+
+To enhance the security of the IVSHMEM framework, we propose a granular access control mechanism that restricts access to the shared memory channels on a per-application basis. This mechanism is implemented via a dedicated kernel module that operates on top of the IVSHMEM device driver.
+
+
+
+\subsubsection{Kernel Module Integration}
+
+The kernel module intercepts all read and write system calls directed at the IVSHMEM device. By doing so, it validates each access request against a predefined set of policies that specify which host or VM is permitted to interact with a given channel. Notably, the module consults the IVSHMEM control section to enforce these access control rules, ensuring that only the authorized party can access the corresponding channel buffer.
+
+
+
+\subsubsection{Channel-Specific Enforcement}
+
+Each channel within the Data Section is allocated to a specific pair of services (e.g., a server and a client). The kernel module uses the control section's metadata to determine channel assignments and enforces strict access control, permitting operations only on the designated channel buffers.
+
+
+
+\subsubsection{Disabling Memory Mapping}
+
+For security reasons, the use of `mmap` is explicitly prohibited for the IVSHMEM device. While this may sacrifice some of the performance benefits typically associated with memory mapping, it is a necessary trade-off to prevent unauthorized access and to maintain robust security across the system.
+
+This granular access control approach not only reinforces data isolation among different VMs and the host but also mitigates potential risks associated with unauthorized memory access, ensuring that the system's security is prioritized over marginal performance gains.
+
 
 
 \subsection{Hypervisor Mediated Handshake Protocol}
 
+We examine why a secure handshake protocol is essential for IVSHMEM communication by identifying its potential security risks, demonstrate how our scenario differs from conventional communication protocols, and introduce our detailed proposed handshake design.
 
 
+
+
+
+
+\subsubsection{The Need for Secure Handshake}
+
+
+\textbf{Mitigating Spoofing/Impersonation Risks:}
+
+Since the trusted host (e.g., dom0 in Xen, SOS in ACRN, or the host in QEMU/KVM) does not inherently know which service is associated with which endpoint, it must ensure that a malicious entity cannot impersonate a legitimate client or server. The protocol must defend against such spoofing attacks by validating the identity of each endpoint before establishing a dedicated channel.
+    
+\textbf{Securing Data in an Untrusted Environment:}
+
+The IVSHMEM memory space, used for key exchange and initial communication, is inherently insecure and can be monitored by potentially untrusted VMs. Encrypting sensitive data—including credentials and key exchange parameters—ensures that any eavesdropped information remains unintelligible and useless to an attacker.
+    
+\textbf{Robust Key Exchange Over Insecure Channels:}
+
+Although the key exchange takes place over an untrusted channel, the protocol employs strong cryptographic techniques (e.g., ephemeral Diffie-Hellman) to generate a shared secret. This secret is then used to secure all subsequent communications between the client and server, effectively mitigating the risks associated with the insecure IVSHMEM space.
+
+
+The following handshake protocol leverages these principles to ensure that even in an environment where the initial contact is over an untrusted channel, the eventual communication between client and server is both authenticated and secure. This design effectively addresses the threat of impersonation or spoofing by mandating robust credential validation and encryption from the very first step of the handshake process.
+
+
+
+
+
+\subsubsection{The Difference from Conventional Security Protocols}
+
+This scenario is similar to other network communication contexts—such as secure exchanges over VPNs or encrypted Wi-Fi networks—in that multiple parties must communicate over an inherently insecure channel. In our proposal, mutual authentication is implemented much like mTLS, where both the client and server prove their identities, and service-level authentication is ensured similarly to EE2E, confirming that the specific service endpoints are legitimate. These mechanisms verify credentials and secure connections, aligning with established practices in conventional protocols.
+
+However, our proposed protocol is different from the conventional internet based security protocol in that 1) The trusted host (hypervisor) is not merely a passive participant but is responsible for allocating finite resources and establishing the communication channel  and 2) The hypervisor functions as a certification authority (CA), validating service credentials and orchestrating the creation of dedicated secure channels between clients and servers. 
+
+The detailed handshake protocol steps are provided below, demonstrating the secure bootstrapping and key negotiation processes that lead to the establishment of a confidential IVSHMEM channel.
+
+
+
+
+
+
+\subsubsection{Protocol Steps}
 
 %----------Figure: handshake -----------------
 \begin{figure}[ht]
@@ -199,10 +303,105 @@ blah blah blah
 
 
 
-blah blah blah
+% ----------- Handshake Protocol ------------
+\begin{enumerate}[label=\arabic*.]
+  \item \textbf{Client Hello:}
+    \begin{itemize}
+      \item \textbf{Purpose:} Initiate the handshake and propose communication parameters.
+      \item \textbf{Message Contents:}
+        \begin{itemize}
+          \item Protocol version and supported extensions.
+          \item A list of supported cipher suites.
+          \item Client identity details (service ID, process ID, VM ID).
+          \item A nonce combined with a timestamp or sequence number for replay protection.
+        \end{itemize}
+    \end{itemize}
+    
+  \item \textbf{Trusted Host (Hypervisor) Hello:}
+    \begin{itemize}
+      \item \textbf{Purpose:} Acknowledge the client's request and provide trusted credentials.
+      \item \textbf{Message Contents:}
+        \begin{itemize}
+          \item The trusted host’s certificate.
+          \item Supported cipher suites (if negotiation is to be assisted).
+          \item Any additional protocol extensions.
+        \end{itemize}
+      \item \textbf{Action:} A temporary secure channel is created between the client and the trusted host.
+    \end{itemize}
+
+  \item \textbf{Client Authentication and Challenge:}
+    \begin{itemize}
+      \item \textbf{Purpose:} Enable explicit mutual authentication.
+      \item \textbf{Message Contents:}
+        \begin{itemize}
+          \item The client’s certificate.
+          \item A cryptographic challenge (e.g., a signature over a nonce) to prove possession of the corresponding private key.
+          \item The intended server’s service ID.
+        \end{itemize}
+    \end{itemize}
+    
+  \item \textbf{Host Verification and Server Request:}
+    \begin{itemize}
+      \item \textbf{Purpose:} Verify the client's credentials and initiate communication with the server.
+      \item \textbf{Action:}
+        \begin{itemize}
+          \item The trusted host validates the client’s certificate and challenge.
+          \item Upon successful validation, the trusted host creates a temporary channel for the server and forwards a secure connection request to the server, including the nonce.
+        \end{itemize}
+    \end{itemize}
+    
+  \item \textbf{Server Hello:}
+    \begin{itemize}
+      \item \textbf{Purpose:} Server passes its credentials and decision to accept the client’s request.
+      \item \textbf{Message Contents:}
+        \begin{itemize}
+          \item The server’s certificate.
+          \item A server-side cryptographic challenge (to verify the server’s private key).
+          \item Its supported cipher suites.
+          \item Acceptance of the client’s request.
+        \end{itemize}
+    \end{itemize}
+    
+  \item \textbf{Trusted Host Authorization and Channel Creation:}
+    \begin{itemize}
+      \item \textbf{Purpose:} Establish a secure, dedicated IVSHMEM channel for data transfer between the server and client.
+      \item \textbf{Action:}
+        \begin{itemize}
+          \item The trusted host verifies the server’s certificate and the corresponding challenge.
+          \item The trusted host creates a communication channel for the server and client and notifies the client.
+          \item The trusted host deletes temporary channels previously established with both the client and the server.
+        \end{itemize}
+    \end{itemize}
+    
+  \item \textbf{Session Key Negotiation:}
+    \begin{itemize}
+      \item \textbf{Purpose:} Finalize the authentication process and derive session keys.
+      \item \textbf{Actions:} The client and server use the provided ephemeral Diffie-Hellman values to compute a shared secret.
+    \end{itemize}
+    
+  \item \textbf{Secure Data Transfer:}
+    \begin{itemize}
+      \item \textbf{Purpose:} Enable confidential and integrity-protected communication.
+      \item \textbf{Action:} With keys derived from the ephemeral exchange and mutual authentication complete, the client and server commence secure data transfer over the authorized IVSHMEM channel.
+    \end{itemize}
+    
+  \item \textbf{Session Management (Optional Enhancements):}
+    \begin{itemize}
+      \item \textbf{Re-keying and Channel Teardown:}
+        \begin{itemize}
+          \item For long-lived sessions, incorporate periodic key renegotiation to limit key exposure.
+        \end{itemize}
+      \item \textbf{Session Resumption:}
+        \begin{itemize}
+          \item Implement mechanisms (similar to TLS session tickets) for efficient session resumption without repeating the full handshake process.
+        \end{itemize}
+    \end{itemize}
+\end{enumerate}
+% ------------------------------
 
 
-\subsection{Channel-based Data Transfer}
+
+\subsection{A Design for Performant Data Transfer}
 
 \subsubsection{Dynamic Channel Rebalancing}
 
@@ -215,7 +414,6 @@ blah blah blah
 \subsubsection{Bi-directional Ring Buffer}
 
 blah blah blah
-Yoo Jung Cuttie
 
 
 \section{Implementation}
@@ -284,67 +482,6 @@ done in all entries found in the References section of this document.
 Now we're going take a look at Section~\ref{sec:figs}, but not before
 observing that refs to sections and citations and such are colored and
 clickable in the PDF because of the packages we've included.
-
-%-------------------------------------------------------------------------------
-\section{Floating Figures and Lists}
-\label{sec:figs}
-%-------------------------------------------------------------------------------
-
-
-%---------------------------
-\begin{figure}
-\begin{center}
-\begin{tikzpicture}
-  \draw[thin,gray!40] (-2,-2) grid (2,2);
-  \draw[<->] (-2,0)--(2,0) node[right]{$x$};
-  \draw[<->] (0,-2)--(0,2) node[above]{$y$};
-  \draw[line width=2pt,blue,-stealth](0,0)--(1,1)
-        node[anchor=south west]{$\boldsymbol{u}$};
-  \draw[line width=2pt,red,-stealth](0,0)--(-1,-1)
-        node[anchor=north east]{$\boldsymbol{-u}$};
-\end{tikzpicture}
-\end{center}
-\caption{\label{fig:vectors} Text size inside figure should be as big as
-  caption's text. Text size inside figure should be as big as
-  caption's text. Text size inside figure should be as big as
-  caption's text. Text size inside figure should be as big as
-  caption's text. Text size inside figure should be as big as
-  caption's text. }
-\end{figure}
-%% %---------------------------
-
-
-Here's a typical reference to a floating figure:
-Figure~\ref{fig:vectors}. Floats should usually be placed where latex
-wants then. Figure\ref{fig:vectors} is centered, and has a caption
-that instructs you to make sure that the size of the text within the
-figures that you use is as big as (or bigger than) the size of the
-text in the caption of the figures. Please do. Really.
-
-In our case, we've explicitly drawn the figure inlined in latex, to
-allow this tex file to cleanly compile. But usually, your figures will
-reside in some file.pdf, and you'd include them in your document
-with, say, \textbackslash{}includegraphics.
-
-Lists are sometimes quite handy. If you want to itemize things, feel
-free:
-
-\begin{description}
-  
-\item[fread] a function that reads from a \texttt{stream} into the
-  array \texttt{ptr} at most \texttt{nobj} objects of size
-  \texttt{size}, returning returns the number of objects read.
-
-\item[Fred] a person's name, e.g., there once was a dude named Fred
-  who separated usenix.sty from this file to allow for easy
-  inclusion.
-\end{description}
-
-\noindent
-The noindent at the start of this paragraph in its tex version makes
-it clear that it's a continuation of the preceding paragraph, as
-opposed to a new paragraph in its own right.
-
 
 \subsection{LaTeX-ing Your TeX File}
 %-----------------------------------
