@@ -8,9 +8,9 @@
 #define IVSHMEM_RUNNING_OS 1  // 1: SHM, 2: QEMU_VM, 3: QEMU_HOST
 
 #if IVSHMEM_RUNNING_OS == 1  // SHM
-#define IVSHMEM_PCI_PATH "/dev/shm/mysharedmem"
-#define IVSHMEM_RESOURCE0_PATH "/dev/shm/mysharedmem"
-#define IVSHMEM_RESOURCE2_PATH "/dev/shm/mysharedmem"
+#define IVSHMEM_PCI_PATH "/dev/myshm"
+#define IVSHMEM_RESOURCE0_PATH "/dev/myshm"
+#define IVSHMEM_RESOURCE2_PATH "/dev/myshm"
 
 #elif IVSHMEM_RUNNING_OS == 2  // QEMU_VM
 #define IVSHMEM_PCI_PATH "/sys/bus/pci/devices/0000:00:04.0"

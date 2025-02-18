@@ -6,18 +6,17 @@
 #include <unistd.h>
 #include <stdint.h>
 
-// #define SIZE (1 * 1024 * 1024)  // 4MB
-#define SIZE (1 ) 
+#define SIZE (4 * 1024 * 1024)  // Map the full 4MB
 
 int main(void)
 {
-    int fd = open("/dev/myshmem", O_RDWR);
+    int fd = open("/dev/myshm", O_RDWR);
     if (fd < 0) {
         perror("open");
         exit(EXIT_FAILURE);
     }
 
-    // Map 4MB from /dev/myshmem into our address space.
+    // Map 4MB from /dev/myshm into our address space.
     void *addr = mmap(NULL, SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     if (addr == MAP_FAILED) {
         perror("mmap");

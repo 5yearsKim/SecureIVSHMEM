@@ -36,13 +36,10 @@ int ivshmem_open_dev(struct IvshmemDeviceContext *p_dev_ctx) {
   const char *shmName = "/mysharedmem";
   p_dev_ctx->bar0_fd = -1;
   p_dev_ctx->p_reg = NULL;
-  p_dev_ctx->bar2_fd = shm_open("/mysharedmem", O_CREAT | O_RDWR, 0666);
-  if (p_dev_ctx->bar2_fd == -1) {
-    printf("Failed to create/open shared memory\n");
-    return -1;
-  }
-  if (ftruncate(p_dev_ctx->bar2_fd, IVSHMEM_SIZE) == -1) {
-    printf("Failed to set size for shared memory\n");
+
+  p_dev_ctx->bar2_fd = open(IVSHMEM_RESOURCE2_PATH, O_RDWR);
+  if (p_dev_ctx->bar2_fd < 0) {
+    printf("Failed to open %s\n", IVSHMEM_RESOURCE2_PATH);
     return -1;
   }
   p_dev_ctx->p_shmem = mmap(NULL, IVSHMEM_SIZE, PROT_READ | PROT_WRITE,

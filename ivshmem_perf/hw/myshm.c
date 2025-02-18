@@ -21,6 +21,13 @@ static dev_t dev_number;
 static struct class *mmap_class = NULL;  // Device class
 static struct cdev my_cdev;              // Character device structure
 
+
+/*
+ * Shared memory device buffer.
+ * Note: This variable is used in shm_mmap and is allocated in shm_init.
+ */
+static char *device_buffer = NULL;
+
 /* 
  * Use a variable for the printk prefix.
  * This allows easy modification in the future.
@@ -31,66 +38,70 @@ static const char *shm_prefix = "myshm: ";
  * File operations
  */
 
-// shm_open: Called when the device file is opened.
 static int shm_open(struct inode *inode, struct file *file)
 {
     printk(KERN_INFO "%sDevice opened\n", shm_prefix);
     return 0;
 }
 
-// shm_release: Called when the device file is closed.
 static int shm_release(struct inode *inode, struct file *file)
 {
     printk(KERN_INFO "%sDevice closed\n", shm_prefix);
     return 0;
 }
 
-// /*
-//  * shm_mmap: Maps our 4MB kernel buffer into the user process’s address space.
-//  *
-//  * The user process will call mmap() on the device file, and this function
-//  * will map the vmalloc()’ed memory into its address space page by page.
-//  */
-// static int shm_mmap(struct file *file, struct vm_area_struct *vma)
+// static int shm_mmap(struct file *filp, struct vm_area_struct *vma)
 // {
-//     unsigned long user_start = vma->vm_start;
+//     unsigned long offset = vma->vm_pgoff << PAGE_SHIFT;
 //     unsigned long size = vma->vm_end - vma->vm_start;
-//     unsigned long offset = 0;
 //     unsigned long pfn;
-//     int ret;
 
-//     if (size > MEM_SIZE) {
-//         printk(KERN_ERR "%sRequested mmap size too large\n", shm_prefix);
+//     /* Check if requested size is within our buffer */
+//     if (offset + size > MEM_SIZE)
 //         return -EINVAL;
-//     }
 
-//     /* Map each page from our device_buffer into user space */
-//     while (offset < size) {
-//         /* Convert virtual address (within device_buffer) to page frame number */
-//         pfn = vmalloc_to_pfn(device_buffer + offset);
-//         ret = remap_pfn_range(vma, user_start + offset, pfn, PAGE_SIZE, vma->vm_page_prot);
-//         if (ret < 0) {
-//             printk(KERN_ERR "%sremap_pfn_range failed at offset %lu\n", shm_prefix, offset);
-//             return ret;
-//         }
-//         offset += PAGE_SIZE;
-//     }
-//     printk(KERN_INFO "%smmap successful, mapped %lu bytes\n", shm_prefix, size);
+//     /* Convert the vmalloc'ed address to a physical page frame number */
+//     pfn = vmalloc_to_pfn(device_buffer + offset);
+
+//     /* Map the page frame into user space */
+//     if (remap_pfn_range(vma, vma->vm_start, pfn, size, vma->vm_page_prot))
+//         return -EAGAIN;
+
 //     return 0;
 // }
+
+static int shm_mmap(struct file *filp, struct vm_area_struct *vma)
+{
+    unsigned long offset = vma->vm_pgoff << PAGE_SHIFT;
+    unsigned long size = vma->vm_end - vma->vm_start;
+    unsigned long cur_vaddr, cur_pfn;
+    int ret;
+
+    /* Check if requested size is within our buffer */
+    if (offset + size > MEM_SIZE)
+        return -EINVAL;
+
+    for (cur_vaddr = vma->vm_start; size > 0; cur_vaddr += PAGE_SIZE, offset += PAGE_SIZE, size -= PAGE_SIZE) {
+        cur_pfn = vmalloc_to_pfn(device_buffer + offset);
+        ret = remap_pfn_range(vma, cur_vaddr, cur_pfn, PAGE_SIZE, vma->vm_page_prot);
+        if (ret)
+            return -EAGAIN;
+    }
+
+    return 0;
+}
+
+
+
 
 // Define file operations that our driver supports.
 static struct file_operations fops = {
     .owner   = THIS_MODULE,
     .open    = shm_open,
     .release = shm_release,
+    .mmap    = shm_mmap,
 };
 
-/*
- * Shared memory device buffer.
- * Note: This variable is used in shm_mmap and is allocated in shm_init.
- */
-static char *device_buffer = NULL;
 
 /*
  * Module initialization

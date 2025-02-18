@@ -13,7 +13,7 @@
 #include "ivshmem_trusted.h"
 
 #define RB_TIMER_INTERVAL_SEC 1    /* rebalancing every 1 second */
-#define CTL_TIMER_INTERVAL_MSEC 10 /* control check every 10 msec */
+#define CTL_TIMER_INTERVAL_MSEC 100 /* control check every N msec */
 
 int main() {
   struct IvshmemDeviceContext dev_ctx;
@@ -30,8 +30,11 @@ int main() {
   ret = ivshmem_open_dev(&dev_ctx);
   assert(ret == 0);
 
+
+
   p_ctr = (struct IvshmemControlSection *)dev_ctx.p_shmem;
   p_data = ivshmem_get_data_section(p_ctr);
+
 
   printf("Initializing control section...\n");
   ret = ivshmem_init_control_section(p_ctr, p_data);
