@@ -1,0 +1,5 @@
+*.crt
+*.key
+*.csr
+#  file to monitor the serial number of the certificate
+*.srl 
