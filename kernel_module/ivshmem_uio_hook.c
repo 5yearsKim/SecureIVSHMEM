@@ -81,21 +81,15 @@ enum ivshmem_ftrace_e {
         SET,
 };
 
-struct ivshmem_uio_hook_data {
-        int limit_map_size;
-        int (*origin_mmap)(struct file *file, struct vm_area_struct *vma);
-};
-
 struct ivshmem_context {
         unsigned long target_addr;
+        unsigned long limit_map_size;
 
         struct ftrace_ops *ops;
-        struct ivshmem_uio_hook_data *hook_data;
 };
 
 static struct ivshmem_context *__ivshmem_ctx_create(void);
 static struct ftrace_ops *__ivshmem_ops_create(void);
-static struct ivshmem_uio_hook_data *__ivshmem_hook_data_create(void);
 
 static void notrace __ivshmem_ftrace_hook_func(unsigned long ip,
                                                unsigned long parent_ip,
@@ -118,16 +112,9 @@ static int __init ivshmem_uio_hook_init(void) {
         FORMULA_GUARD_WITH_EXIT_FUNC(ops == NULL, -ENOMEM,
                                      __ivshmem_uio_hook_exit(ctx), "");
 
-        struct ivshmem_uio_hook_data *hook_data = __ivshmem_hook_data_create();
-        FORMULA_GUARD_WITH_EXIT_FUNC(hook_data == NULL, -ENOMEM,
-                                     __ivshmem_uio_hook_exit(ctx), "");
-
         /* init the chaining */
         ctx->ops = ops;
-        ctx->hook_data = hook_data;
         ops->private = ctx;
-        hook_data->origin_mmap =
-            (int (*)(struct file *, struct vm_area_struct *))ctx->target_addr;
 
         /* set the ftrace */
         int ret =
@@ -168,6 +155,8 @@ static struct ivshmem_context *__ivshmem_ctx_create(void) {
                                      __ivshmem_uio_hook_destroy(new),
                                      ERR_INVALID_RET);
 
+        new->limit_map_size = 0x1000; /* 4KB */
+
         return new;
 }
 
@@ -181,17 +170,6 @@ static struct ftrace_ops *__ivshmem_ops_create(void) {
         return new;
 }
 
-static struct ivshmem_uio_hook_data *__ivshmem_hook_data_create(void) {
-        struct ivshmem_uio_hook_data *new =
-            kmalloc(sizeof(struct ivshmem_uio_hook_data), GFP_KERNEL);
-        FORMULA_GUARD(new == NULL, NULL, ERR_MEMORY_SHORTAGE);
-
-        new->limit_map_size = 0;
-        new->origin_mmap = NULL;
-
-        return new;
-}
-
 static void notrace __ivshmem_ftrace_hook_func(unsigned long ip,
                                                unsigned long parent_ip,
                                                struct ftrace_ops *ops,
@@ -199,8 +177,7 @@ static void notrace __ivshmem_ftrace_hook_func(unsigned long ip,
         FORMULA_GUARD(ops == NULL || regs == NULL, , ERR_INVALID_PTR);
 
         struct ivshmem_context *ctx = (struct ivshmem_context *)ops->private;
-        struct ivshmem_uio_hook_data *hook_data = ctx->hook_data;
-        FORMULA_GUARD(ctx == NULL || hook_data == NULL, , ERR_INVALID_PTR);
+        FORMULA_GUARD(ctx == NULL, , ERR_INVALID_PTR);
 
         struct file *file = (struct file *)ftrace_regs_get_argument(regs, 0);
         struct vm_area_struct *vma =
@@ -213,7 +190,7 @@ static void notrace __ivshmem_ftrace_hook_func(unsigned long ip,
                 /* only check from the /dev/uioX */
                 if (strncmp(dname, "uio", 3) == 0) {
                         size_t length = vma->vm_end - vma->vm_start;
-                        if (length > hook_data->limit_map_size) {
+                        if (length > ctx->limit_map_size) {
                                 /* call the dummy mmap */
                                 instruction_pointer_set(
                                     (struct pt_regs *)regs,
@@ -245,7 +222,6 @@ static inline int __ivshmem_uio_hook_exit(struct ivshmem_context *ctx) {
         unregister_ftrace_function(ctx->ops);
         ftrace_set_filter_ip(ctx->ops, ctx->target_addr, REMOVE, RESET);
 
-        __ivshmem_uio_hook_destroy(ctx->hook_data);
         __ivshmem_uio_hook_destroy(ctx->ops);
         __ivshmem_uio_hook_destroy(ctx);
 
