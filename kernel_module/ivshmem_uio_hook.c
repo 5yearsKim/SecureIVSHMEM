@@ -101,6 +101,7 @@ static void notrace __ivshmem_ftrace_hook_func(unsigned long ip,
                                                unsigned long parent_ip,
                                                struct ftrace_ops *ops,
                                                struct ftrace_regs *regs);
+static int __ivshmem_dummy_mmap(struct file *file, struct vm_area_struct *vma);
 
 static inline int __ivshmem_uio_hook_destroy(void *del);
 static inline int __ivshmem_uio_hook_exit(struct ivshmem_context *ctx);
@@ -195,6 +196,39 @@ static void notrace __ivshmem_ftrace_hook_func(unsigned long ip,
                                                unsigned long parent_ip,
                                                struct ftrace_ops *ops,
                                                struct ftrace_regs *regs) {
+        FORMULA_GUARD(ops == NULL || regs == NULL, , ERR_INVALID_PTR);
+
+        struct ivshmem_context *ctx = (struct ivshmem_context *)ops->private;
+        struct ivshmem_uio_hook_data *hook_data = ctx->hook_data;
+        FORMULA_GUARD(ctx == NULL || hook_data == NULL, , ERR_INVALID_PTR);
+
+        struct file *file = (struct file *)ftrace_regs_get_argument(regs, 0);
+        struct vm_area_struct *vma =
+            (struct vm_area_struct *)ftrace_regs_get_argument(regs, 1);
+        FORMULA_GUARD(file == NULL || vma == NULL, , ERR_INVALID_PTR);
+
+        if (file->f_path.dentry) {
+                const char *dname = file->f_path.dentry->d_name.name;
+
+                /* only check from the /dev/uioX */
+                if (strncmp(dname, "uio", 3) == 0) {
+                        size_t length = vma->vm_end - vma->vm_start;
+                        if (length > hook_data->limit_map_size) {
+                                /* call the dummy mmap */
+                                instruction_pointer_set(
+                                    (struct pt_regs *)regs,
+                                    __ivshmem_dummy_mmap(file, vma));
+                                return;
+                        }
+                }
+        }
+
+        /* origin mmap */
+        instruction_pointer_set((struct pt_regs *)regs, ctx->target_addr);
+}
+
+static int __ivshmem_dummy_mmap(struct file *file, struct vm_area_struct *vma) {
+        FORMULA_GUARD(1, -EINVAL, "Mapping size exceeds allowed limit!");
 }
 
 static inline int __ivshmem_uio_hook_destroy(void *del) {
