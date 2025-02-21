@@ -74,6 +74,13 @@
                 }                                                              \
         } while (0)
 
+enum ivshmem_ftrace_e {
+        REGISTER,
+        REMOVE,
+        RESET = 0,
+        SET,
+};
+
 struct ivshmem_uio_hook_data {
         int limit_map_size;
         int (*origin_mmap)(struct file *file, struct vm_area_struct *vma);
@@ -87,14 +94,15 @@ struct ivshmem_context {
 };
 
 static struct ivshmem_context *__ivshmem_ctx_create(void);
-static int __ivshmem_ctx_destroy(struct ivshmem_context *del);
-
 static struct ftrace_ops *__ivshmem_ops_create(void);
-static int __ivshmem_ops_destroy(struct ftrace_ops *del);
-
 static struct ivshmem_uio_hook_data *__ivshmem_hook_data_create(void);
-static int __ivshmem_hook_data_destroy(struct ivshmem_uio_hook_data *del);
 
+static void notrace __ivshmem_ftrace_hook_func(unsigned long ip,
+                                               unsigned long parent_ip,
+                                               struct ftrace_ops *ops,
+                                               struct ftrace_regs *regs);
+
+static inline int __ivshmem_uio_hook_destroy(void *del);
 static inline int __ivshmem_uio_hook_exit(struct ivshmem_context *ctx);
 
 static struct ivshmem_context *g_ctx = NULL;
@@ -103,19 +111,34 @@ static int __init ivshmem_uio_hook_init(void) {
         FORMULA_GUARD(g_ctx != NULL, -EINVAL, ERR_INVALID_PTR);
 
         struct ivshmem_context *ctx = __ivshmem_ctx_create();
-        FORMULA_GUARD_WITH_EXIT_FUNC(ctx == NULL, -ENOMEM,
-                                     __ivshmem_uio_hook_exit, "");
+        FORMULA_GUARD(ctx == NULL, -ENOMEM, "");
 
         struct ftrace_ops *ops = __ivshmem_ops_create();
         FORMULA_GUARD_WITH_EXIT_FUNC(ops == NULL, -ENOMEM,
-                                     __ivshmem_uio_hook_exit, "");
+                                     __ivshmem_uio_hook_exit(ctx), "");
 
         struct ivshmem_uio_hook_data *hook_data = __ivshmem_hook_data_create();
         FORMULA_GUARD_WITH_EXIT_FUNC(hook_data == NULL, -ENOMEM,
-                                     __ivshmem_uio_hook_exit, "");
+                                     __ivshmem_uio_hook_exit(ctx), "");
 
+        /* init the chaining */
         ctx->ops = ops;
         ctx->hook_data = hook_data;
+        ops->private = ctx;
+        hook_data->origin_mmap =
+            (int (*)(struct file *, struct vm_area_struct *))ctx->target_addr;
+
+        /* set the ftrace */
+        int ret =
+            ftrace_set_filter_ip(ctx->ops, ctx->target_addr, REGISTER, RESET);
+        FORMULA_GUARD_WITH_EXIT_FUNC(ret < 0, ret, __ivshmem_uio_hook_exit(ctx),
+                                     ERR_INVALID_RET);
+
+        ret = register_ftrace_function(ctx->ops);
+        FORMULA_GUARD_WITH_EXIT_FUNC(ret < 0, ret, __ivshmem_uio_hook_exit(ctx),
+                                     ERR_INVALID_RET);
+
+        /* for module_exit */
         g_ctx = ctx;
 
         return 0;
@@ -130,33 +153,31 @@ static struct ivshmem_context *__ivshmem_ctx_create(void) {
             kmalloc(sizeof(struct ivshmem_context), GFP_KERNEL);
         FORMULA_GUARD(new == NULL, NULL, ERR_MEMORY_SHORTAGE);
 
+        struct kprobe kp = {
+            .symbol_name = "uio_mmap",
+        };
+
+        int ret = register_kprobe(&kp);
+        FORMULA_GUARD_WITH_EXIT_FUNC(
+            ret < 0, NULL, __ivshmem_uio_hook_destroy(new), ERR_INVALID_RET);
+
+        new->target_addr = (unsigned long)kp.addr;
+        unregister_kprobe(&kp);
+        FORMULA_GUARD_WITH_EXIT_FUNC(new->target_addr == 0, NULL,
+                                     __ivshmem_uio_hook_destroy(new),
+                                     ERR_INVALID_RET);
+
         return new;
-}
-
-static int __ivshmem_ctx_destroy(struct ivshmem_context *del) {
-        FORMULA_GUARD(del == NULL, -EINVAL, ERR_INVALID_PTR);
-
-        PTR_FREE(del);
-
-        return 0;
 }
 
 static struct ftrace_ops *__ivshmem_ops_create(void) {
         struct ftrace_ops *new = kmalloc(sizeof(struct ftrace_ops), GFP_KERNEL);
         FORMULA_GUARD(new == NULL, NULL, ERR_MEMORY_SHORTAGE);
 
-        new->func = NULL;
+        new->func = __ivshmem_ftrace_hook_func;
         new->flags = FTRACE_OPS_FL_SAVE_REGS | FTRACE_OPS_FL_RECURSION;
 
         return new;
-}
-
-static int __ivshmem_ops_destroy(struct ftrace_ops *del) {
-        FORMULA_GUARD(del == NULL, -EINVAL, ERR_INVALID_PTR);
-
-        PTR_FREE(del);
-
-        return 0;
 }
 
 static struct ivshmem_uio_hook_data *__ivshmem_hook_data_create(void) {
@@ -170,7 +191,13 @@ static struct ivshmem_uio_hook_data *__ivshmem_hook_data_create(void) {
         return new;
 }
 
-static int __ivshmem_hook_data_destroy(struct ivshmem_uio_hook_data *del) {
+static void notrace __ivshmem_ftrace_hook_func(unsigned long ip,
+                                               unsigned long parent_ip,
+                                               struct ftrace_ops *ops,
+                                               struct ftrace_regs *regs) {
+}
+
+static inline int __ivshmem_uio_hook_destroy(void *del) {
         FORMULA_GUARD(del == NULL, -EINVAL, ERR_INVALID_PTR);
 
         PTR_FREE(del);
@@ -181,9 +208,12 @@ static int __ivshmem_hook_data_destroy(struct ivshmem_uio_hook_data *del) {
 static inline int __ivshmem_uio_hook_exit(struct ivshmem_context *ctx) {
         FORMULA_GUARD(ctx == NULL, -EINVAL, ERR_INVALID_PTR);
 
-        __ivshmem_hook_data_destroy(ctx->hook_data);
-        __ivshmem_ops_destroy(ctx->ops);
-        __ivshmem_ctx_destroy(ctx);
+        unregister_ftrace_function(ctx->ops);
+        ftrace_set_filter_ip(ctx->ops, ctx->target_addr, REMOVE, RESET);
+
+        __ivshmem_uio_hook_destroy(ctx->hook_data);
+        __ivshmem_uio_hook_destroy(ctx->ops);
+        __ivshmem_uio_hook_destroy(ctx);
 
         return 0;
 }
