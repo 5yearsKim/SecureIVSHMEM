@@ -29,6 +29,7 @@
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/string.h>
+#include <linux/version.h>
 
 #define ERR_INVALID_PTR "Invalid Pointer."
 #define ERR_INVALID_RET "Invalild return value."
@@ -179,9 +180,19 @@ static void notrace __ivshmem_ftrace_hook_func(unsigned long ip,
         struct ivshmem_context *ctx = (struct ivshmem_context *)ops->private;
         FORMULA_GUARD(ctx == NULL, , ERR_INVALID_PTR);
 
-        struct file *file = (struct file *)ftrace_regs_get_argument(regs, 0);
-        struct vm_area_struct *vma =
-            (struct vm_area_struct *)ftrace_regs_get_argument(regs, 1);
+        struct pt_regs *pt_regs;
+        struct file *file;
+        struct vm_area_struct *vma;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)
+        pt_regs = arch_ftrace_get_regs(regs);
+        file = (struct file *)ftrace_regs_get_argument(regs, 0);
+        vma = (struct vm_area_struct *)ftrace_regs_get_argument(regs, 1);
+#else
+        pt_regs = (struct pt_regs *)regs;
+        file = (struct file *)pt_regs->di;
+        vma = (struct vm_area_struct *)pt_regs->si;
+#endif
         FORMULA_GUARD(file == NULL || vma == NULL, , ERR_INVALID_PTR);
 
         if (file->f_path.dentry) {
@@ -193,15 +204,14 @@ static void notrace __ivshmem_ftrace_hook_func(unsigned long ip,
                         if (length > ctx->limit_map_size) {
                                 /* call the dummy mmap */
                                 instruction_pointer_set(
-                                    (struct pt_regs *)regs,
-                                    __ivshmem_dummy_mmap(file, vma));
+                                    pt_regs, __ivshmem_dummy_mmap(file, vma));
                                 return;
                         }
                 }
         }
 
         /* origin mmap */
-        instruction_pointer_set((struct pt_regs *)regs, ctx->target_addr);
+        instruction_pointer_set(pt_regs, ctx->target_addr);
 }
 
 static int __ivshmem_dummy_mmap(struct file *file, struct vm_area_struct *vma) {
