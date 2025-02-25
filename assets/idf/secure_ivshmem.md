@@ -23,7 +23,7 @@ N/A
 Virtualization refers to a technology that allows a single physical computing resource to run multiple isolated environments by abstracting hardware from the software. A hypervisor abstracts the underlying hardware so that multiple VMs (Virtual Machines) share the same physical resources while remaining isolated from each other.
 
 
-### Virtualization in the Automotive Inducstry
+### Virtualization in the Automotive Industry
 One of the fields that virtualization is actively used is the automotive industry. The advances in semiconductors have shifted system architectures from traditional microcontrollers(MCUs) to powerful System-on-Chip(SoC). This evolution not only enhances computational capabilities but also paves the way for Software-Defined Vehicles (SDVs), where flexibility, scalability, and rapid updates are paramount. In SDVs, virtualization technology plays a crucial role by enabling the coexistence of multiple VMs on a single hardware platform, ensuring isolated yet efficient execution of diverse applications. For example, modern cockpit domain controllers often deploy separate VMs for real-time operations (RTOS) and infotainment systems, which is essential for balancing performance and safety.
 
 
@@ -46,16 +46,69 @@ Since multiple VMs can read and write to the same memory space concurrently, imp
 
 ### 4.1 Problem Definition – What technical problem did you solve?
 
-The insecure nature of IVSHMEM exposes it to various threat models such as eavesdropping, man-in-the-middle, and relay attacks. This risk becomes particularly significant when critical systems interact with less secure environments. For example, when a real-time operating system (RTOS) communicates with an Android-based infotainment VM, the shared memory region is vulnerable to attacks. A malicious application running within the Android environment could eavesdrop on sensitive data, alter control signals, or relay corrupted data back to the RTOS. Such compromises not only affect the confidentiality and integrity of the exchanged information but also threaten overall system stability and safety.
 
 
-One potential mitigation strategy against these security threats involves partitioning the shared memory into multiple segments, with each partition exclusively accessible to designated VMs. This approach can prevent a potentially malicious VM from accessing unauthorized memory regions. However, it also reduces the available shared memory size, which may degrade performance. For instance, if a 4MB IVSHMEM region is divided into four 1MB partitions, assigning one partition to a VM1-VM2 pair effectively blocks threats from another VM (such as VM3). Nevertheless, using only 1MB instead of 4MB can negatively impact performance. Moreover, partitioning based on VMs does not mitigate threats originating from within the same VM—for example, a malicious application in a VM could still compromise its assigned partition.
+
+The insecure nature of IVSHMEM exposes it to various threat models such as eavesdropping, man-in-the-middle attack, and relay attacks. This risk becomes particularly significant when critical systems interact with less secure environments. For example, when a real-time operating system (RTOS) communicates with an Android-based infotainment VM, the shared memory region is vulnerable to attacks. A malicious application running within the Android environment could eavesdrop on sensitive data, alter control signals, or relay corrupted data back to the RTOS. Such compromises not only affect the confidentiality and integrity of the exchanged information but also threaten overall system stability and safety.
 
 
-Another mitigation strategy is to implement encryption, ensuring that data written to IVSHMEM is protected from eavesdropping. However, securely exchanging encryption keys between services over an unsecured channel without a trusted authority and an appropriate protocol presents significant challenges.
+Beyond security concerns, IVSHMEM also requires careful concurrency management, especially in a multi-producer, multi-consumer scenario where multiple services within a VM simultaneously access shared memory for communication. Without a well-defined synchronization mechanism, race conditions can lead to data corruption, inconsistencies, and contention-related bottlenecks, ultimately degrading system performance and reliability.
 
 
-In response to these issues, we propose a secure protocol specifically designed for IVSHMEM communication. Our solution addresses these challenges by: 1) partitioning IVSHMEM based on service pairs in VMs and implementing granular access control for each region, 2) introducing a hypervisor-mediated handshake protocol to authenticate service credentials before the hypervisor assigns a communication channel within the IVSHMEM region, and 3) dynamically rebalancing the channel sizes in IVSHMEM according to usage, thereby mitigating the performance degradation associated with partitioning.
+
+Our solution addresses both security threats and concurrency challenges in IVSHMEM by introducing a structured approach that combines memory partitioning, dynamic allocation, access control mechanisms, and performance optimization.
+
+
+1. Memory Partitioning for Security: 
+
+To prevent unauthorized access, we partition the shared memory into multiple segments, ensuring that each partition is exclusively accessible to designated VMs. This prevents malicious VMs from tampering with or eavesdropping on unauthorized memory regions. However, while partitioning improves security, it also introduces a tradeoff: reduced memory availability per communication channel. For example, in a 4MB IVSHMEM region partitioned into four 1MB segments, a communication channel assigned to Service A (VM1) and Service B (VM2) is protected from interference by a malicious VM (VM3). However, the reduced memory per channel can negatively impact performance.
+
+2. Dynamic Shared Memory Allocation:
+
+To mitigate performance degradation caused by static partitioning, we propose a dynamic allocation mechanism that allows shared memory channels to be allocated and resized based on real-time usage. This ensures that resources are utilized efficiently without compromising security. However, dynamic partitioning introduces two major challenges:
+
+    * Challenge 1: Secure Channel Establishment
+    How can two services securely establish a communication channel without being vulnerable to spoofing attacks?
+
+    * Challenge 2: Preventing Unauthorized Access
+    How can we ensure that a malicious service within a VM does not gain unauthorized access to dynamically allocated partitions?
+
+
+
+We propose a solution to address the above challenges as below:
+
+
+1. Hypervisor-Mediated Handshake Protocol:
+To establish a secure communication channel between two endpoints, we introduce a hypervisor-mediated handshake protocol that verifies service authenticity before granting access to the shared memory region. This prevents spoofing attacks and ensures that only legitimate services can communicate.
+
+
+2. Granular Access Control via Kernel Module:
+To enforce fine-grained access control over dynamically allocated partitions, we implement a kernel module that regulates access permissions at the memory region level. This mechanism ensures that only authorized services can read or write to allocated channels, effectively mitigating unauthorized access risks.
+
+3. Channel Rebalancing for Performance Optimization:
+To balance security and performance, we integrate a channel rebalancing mechanism that dynamically adjusts the size of shared memory channels based on real-time communication demands. This approach prevents performance degradation due to excessive partitioning while maintaining strong security guarantees.
+
+
+**Abstracted Library for Seamless Integration**
+
+To simplify IVSHMEM integration for developers, we provide an abstracted library that encapsulates security and concurrency management mechanisms. This allows customers to leverage IVSHMEM for inter-VM communication without the complexities of manual security handling, concurrency synchronization, or performance tuning.
+
+
+<!-- 
+Our proposed solution includes techniques to prevent the above security threats and handle concurrency management by partitioning the shared memory into multiple segments, with each partition exclusively accessible to designated VMs. This approach can prevent a potentially malicious VM from accessing unauthorized memory regions. Also, by only writing data to only defined(?) region, no need to worry for the careful concurrency handling.  However, just simply partitioning the memory segments to predefined region has critical problems.
+it can reduce the available shared memory size, which may degrade performance. For instance, if a 4MB IVSHMEM region is divided into four 1MB partitions, assigning one partition to a communication channel(assigned to service A in VM1 - service B in VM2) effectively blocks threats from malicious VM (VM3).  Nevertheless, using only 1MB instead of 4MB can negatively impact performance. 
+
+Our solution propose a way to dynamically allocate a shared memory channel for the communication. and the size of this communication channel is rebalanced based on the usage of channel. By dyanmically allocating a connection channel, we can mitigate performance degradation coming from the buffer partitioning. However, two challenge arises for the dynamic partition allocation.
+
+1) First, how can a two service endpoint establish a secure channel without spoofing attack?
+
+2) Second, how can we prevent a malicious access to partitioned channel region from malicious service in VM?
+
+
+To address these challenges comming from dynamic channel allocation of shared memory region, (first problem) we propose a hypervisor-mediated handshake protocol for establishment of initial channel connection between two endpoint service. (second problem) we propose a kernel module implementation for the granual access control of the channel in IVSHMEM, which prevent a malicious access from malicious service.
+
+We finally combine a channel channel rebalancing techniques which mitigate the performance degradation coming from partitioning the memory region while maintaining enhanced security. We provide an abstracted library which allow the customer to implement IVSHMEM communication easily with not so much worry of the security and concurrency problem, and performance degradation coming from this. -->
+
 
 
 
