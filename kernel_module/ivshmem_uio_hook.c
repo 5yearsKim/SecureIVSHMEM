@@ -37,11 +37,19 @@
 #define ERR_INVALID_PARAMS "Invalid Parameters."
 #define ERR_MEMORY_SHORTAGE "Failed to allocate the memory."
 
+//#define DEBUG
+
+#ifdef DEBUG
 #define DBG_MSG(fmt, ...)                                                      \
         do {                                                                   \
                 pr_info("[IAPG] " fmt " / func : %s, line : %d\n",             \
                         ##__VA_ARGS__, __func__, __LINE__);                    \
         } while (0)
+#else
+#define DBG_MSG(fmt, ...)                                                      \
+        do {                                                                   \
+        } while (0)
+#endif
 
 #define ERR_MSG(fmt, ...)                                                      \
         do {                                                                   \
@@ -78,8 +86,8 @@
 enum ivshmem_ftrace_e {
         REGISTER,
         REMOVE,
-        RESET = 0,
-        SET,
+        SET = 0,
+        RESET,
 };
 
 struct ivshmem_context {
@@ -119,7 +127,7 @@ static int __init ivshmem_uio_hook_init(void) {
 
         /* set the ftrace */
         int ret =
-            ftrace_set_filter_ip(ctx->ops, ctx->target_addr, REGISTER, RESET);
+            ftrace_set_filter_ip(ctx->ops, ctx->target_addr, REGISTER, SET);
         FORMULA_GUARD_WITH_EXIT_FUNC(ret < 0, ret, __ivshmem_uio_hook_exit(ctx),
                                      ERR_INVALID_RET);
 
@@ -129,6 +137,8 @@ static int __init ivshmem_uio_hook_init(void) {
 
         /* for module_exit */
         g_ctx = ctx;
+
+        DBG_MSG("Success to init the ivshmem uio hook.");
 
         return 0;
 }
@@ -151,12 +161,17 @@ static struct ivshmem_context *__ivshmem_ctx_create(void) {
             ret < 0, NULL, __ivshmem_uio_hook_destroy(new), ERR_INVALID_RET);
 
         new->target_addr = (unsigned long)kp.addr;
+
+        DBG_MSG("Target Addr: 0x%016lx", new->target_addr);
+
         unregister_kprobe(&kp);
         FORMULA_GUARD_WITH_EXIT_FUNC(new->target_addr == 0, NULL,
                                      __ivshmem_uio_hook_destroy(new),
                                      ERR_INVALID_RET);
 
         new->limit_map_size = 0x1000; /* 4KB */
+
+        DBG_MSG("Success to create the ctx.");
 
         return new;
 }
@@ -165,8 +180,11 @@ static struct ftrace_ops *__ivshmem_ops_create(void) {
         struct ftrace_ops *new = kmalloc(sizeof(struct ftrace_ops), GFP_KERNEL);
         FORMULA_GUARD(new == NULL, NULL, ERR_MEMORY_SHORTAGE);
 
+        memset(new, 0, sizeof(struct ftrace_ops));
         new->func = __ivshmem_ftrace_hook_func;
         new->flags = FTRACE_OPS_FL_SAVE_REGS | FTRACE_OPS_FL_RECURSION;
+
+        DBG_MSG("Success to create the ops.");
 
         return new;
 }
@@ -204,7 +222,8 @@ static void notrace __ivshmem_ftrace_hook_func(unsigned long ip,
                         if (length > ctx->limit_map_size) {
                                 /* call the dummy mmap */
                                 instruction_pointer_set(
-                                    pt_regs, __ivshmem_dummy_mmap(file, vma));
+                                    pt_regs,
+                                    (unsigned long)__ivshmem_dummy_mmap);
                                 return;
                         }
                 }
@@ -230,10 +249,12 @@ static inline int __ivshmem_uio_hook_exit(struct ivshmem_context *ctx) {
         FORMULA_GUARD(ctx == NULL, -EINVAL, ERR_INVALID_PTR);
 
         unregister_ftrace_function(ctx->ops);
-        ftrace_set_filter_ip(ctx->ops, ctx->target_addr, REMOVE, RESET);
+        ftrace_set_filter_ip(ctx->ops, ctx->target_addr, REMOVE, SET);
 
         __ivshmem_uio_hook_destroy(ctx->ops);
         __ivshmem_uio_hook_destroy(ctx);
+
+        DBG_MSG("Success to exit the ivshmem uio hook.");
 
         return 0;
 }
