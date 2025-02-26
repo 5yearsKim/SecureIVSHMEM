@@ -90,23 +90,33 @@ enum ivshmem_ftrace_e {
         RESET,
 };
 
+struct ivshmem_lock {
+        volatile bool is_locked;
+        spinlock_t *spin;
+};
+
 struct ivshmem_context {
         unsigned long target_addr;
         unsigned long limit_map_size;
 
         struct ftrace_ops *ops;
+        struct ivshmem_lock *lock;
 };
 
 static struct ivshmem_context *__ivshmem_ctx_create(void);
 static struct ftrace_ops *__ivshmem_ops_create(void);
+static struct ivshmem_lock *__ivshmem_lock_create(void);
 
 static void notrace __ivshmem_ftrace_hook_func(unsigned long ip,
                                                unsigned long parent_ip,
                                                struct ftrace_ops *ops,
                                                struct ftrace_regs *regs);
+static int __ivshmem_origin_mmap(struct file *file, struct vm_area_struct *vma);
 static int __ivshmem_dummy_mmap(struct file *file, struct vm_area_struct *vma);
 
-static inline int __ivshmem_uio_hook_destroy(void *del);
+static inline int __ivshmem_lock_destroy(void *del);
+static inline int __ivshmem_ops_destroy(void *del);
+static inline int __ivshmem_ctx_destroy(void *del);
 static inline int __ivshmem_uio_hook_exit(struct ivshmem_context *ctx);
 
 static struct ivshmem_context *g_ctx = NULL;
@@ -121,8 +131,13 @@ static int __init ivshmem_uio_hook_init(void) {
         FORMULA_GUARD_WITH_EXIT_FUNC(ops == NULL, -ENOMEM,
                                      __ivshmem_uio_hook_exit(ctx), "");
 
+        struct ivshmem_lock *lock = __ivshmem_lock_create();
+        FORMULA_GUARD_WITH_EXIT_FUNC(lock == NULL, -ENOMEM,
+                                     __ivshmem_uio_hook_exit(ctx), "");
+
         /* init the chaining */
         ctx->ops = ops;
+        ctx->lock = lock;
         ops->private = ctx;
 
         /* set the ftrace */
@@ -152,13 +167,14 @@ static struct ivshmem_context *__ivshmem_ctx_create(void) {
             kmalloc(sizeof(struct ivshmem_context), GFP_KERNEL);
         FORMULA_GUARD(new == NULL, NULL, ERR_MEMORY_SHORTAGE);
 
+        /* target_addr */
         struct kprobe kp = {
             .symbol_name = "uio_mmap",
         };
 
         int ret = register_kprobe(&kp);
-        FORMULA_GUARD_WITH_EXIT_FUNC(
-            ret < 0, NULL, __ivshmem_uio_hook_destroy(new), ERR_INVALID_RET);
+        FORMULA_GUARD_WITH_EXIT_FUNC(ret < 0, NULL, __ivshmem_ctx_destroy(new),
+                                     ERR_INVALID_RET);
 
         new->target_addr = (unsigned long)kp.addr;
 
@@ -166,9 +182,10 @@ static struct ivshmem_context *__ivshmem_ctx_create(void) {
 
         unregister_kprobe(&kp);
         FORMULA_GUARD_WITH_EXIT_FUNC(new->target_addr == 0, NULL,
-                                     __ivshmem_uio_hook_destroy(new),
+                                     __ivshmem_ctx_destroy(new),
                                      ERR_INVALID_RET);
 
+        /* TODO: set limit size from control section in ivshmem */
         new->limit_map_size = 0x1000; /* 4KB */
 
         DBG_MSG("Success to create the ctx.");
@@ -189,6 +206,24 @@ static struct ftrace_ops *__ivshmem_ops_create(void) {
         return new;
 }
 
+static struct ivshmem_lock *__ivshmem_lock_create(void) {
+        struct ivshmem_lock *new =
+            kmalloc(sizeof(struct ivshmem_lock), GFP_KERNEL);
+        FORMULA_GUARD(new == NULL, NULL, ERR_MEMORY_SHORTAGE);
+
+        new->is_locked = false;
+        new->spin = kmalloc(sizeof(spinlock_t), GFP_KERNEL);
+        FORMULA_GUARD_WITH_EXIT_FUNC(new->spin == NULL, NULL,
+                                     __ivshmem_lock_destroy(new),
+                                     ERR_MEMORY_SHORTAGE);
+
+        spin_lock_init(new->spin);
+
+        DBG_MSG("Success to create the lock.");
+
+        return new;
+}
+
 static void notrace __ivshmem_ftrace_hook_func(unsigned long ip,
                                                unsigned long parent_ip,
                                                struct ftrace_ops *ops,
@@ -196,7 +231,13 @@ static void notrace __ivshmem_ftrace_hook_func(unsigned long ip,
         FORMULA_GUARD(ops == NULL || regs == NULL, , ERR_INVALID_PTR);
 
         struct ivshmem_context *ctx = (struct ivshmem_context *)ops->private;
-        FORMULA_GUARD(ctx == NULL, , ERR_INVALID_PTR);
+        FORMULA_GUARD(ctx == NULL || ctx->lock == NULL, , ERR_INVALID_PTR);
+
+        struct ivshmem_lock *lock = ctx->lock;
+        if (lock->is_locked == true) {
+                DBG_MSG("Already locked in hook func");
+                return;
+        }
 
         struct pt_regs *pt_regs;
         struct file *file;
@@ -213,6 +254,9 @@ static void notrace __ivshmem_ftrace_hook_func(unsigned long ip,
 #endif
         FORMULA_GUARD(file == NULL || vma == NULL, , ERR_INVALID_PTR);
 
+        spin_lock(lock->spin);
+        lock->is_locked = true;
+
         if (file->f_path.dentry) {
                 const char *dname = file->f_path.dentry->d_name.name;
 
@@ -224,20 +268,62 @@ static void notrace __ivshmem_ftrace_hook_func(unsigned long ip,
                                 instruction_pointer_set(
                                     pt_regs,
                                     (unsigned long)__ivshmem_dummy_mmap);
+
+                                spin_unlock(lock->spin);
                                 return;
                         }
                 }
         }
 
         /* origin mmap */
-        instruction_pointer_set(pt_regs, ctx->target_addr);
+        instruction_pointer_set(pt_regs, (unsigned long)__ivshmem_origin_mmap);
+        spin_unlock(lock->spin);
+}
+
+static int __ivshmem_origin_mmap(struct file *file,
+                                 struct vm_area_struct *vma) {
+        struct ivshmem_context *ctx = g_ctx;
+        struct ivshmem_lock *lock = ctx->lock;
+
+        int (*origin_mmap)(struct file *, struct vm_area_struct *) =
+            (int (*)(struct file *, struct vm_area_struct *))ctx->target_addr;
+
+        origin_mmap(file, vma);
+
+        spin_lock(lock->spin);
+        lock->is_locked = false;
+        spin_unlock(lock->spin);
+
+        FORMULA_GUARD(1, 0, "Call the origin mmap!");
 }
 
 static int __ivshmem_dummy_mmap(struct file *file, struct vm_area_struct *vma) {
+        struct ivshmem_lock *lock = g_ctx->lock;
+        spin_lock(lock->spin);
+        lock->is_locked = false;
+        spin_unlock(lock->spin);
+
         FORMULA_GUARD(1, -EINVAL, "Mapping size exceeds allowed limit!");
 }
 
-static inline int __ivshmem_uio_hook_destroy(void *del) {
+static inline int __ivshmem_lock_destroy(void *del) {
+        FORMULA_GUARD(del == NULL, -EINVAL, ERR_INVALID_PTR);
+
+        PTR_FREE(((struct ivshmem_lock *)del)->spin);
+        PTR_FREE(del);
+
+        return 0;
+}
+
+static inline int __ivshmem_ops_destroy(void *del) {
+        FORMULA_GUARD(del == NULL, -EINVAL, ERR_INVALID_PTR);
+
+        PTR_FREE(del);
+
+        return 0;
+}
+
+static inline int __ivshmem_ctx_destroy(void *del) {
         FORMULA_GUARD(del == NULL, -EINVAL, ERR_INVALID_PTR);
 
         PTR_FREE(del);
@@ -251,8 +337,9 @@ static inline int __ivshmem_uio_hook_exit(struct ivshmem_context *ctx) {
         unregister_ftrace_function(ctx->ops);
         ftrace_set_filter_ip(ctx->ops, ctx->target_addr, REMOVE, SET);
 
-        __ivshmem_uio_hook_destroy(ctx->ops);
-        __ivshmem_uio_hook_destroy(ctx);
+        __ivshmem_lock_destroy(ctx->lock);
+        __ivshmem_ops_destroy(ctx->ops);
+        __ivshmem_ctx_destroy(ctx);
 
         DBG_MSG("Success to exit the ivshmem uio hook.");
 
