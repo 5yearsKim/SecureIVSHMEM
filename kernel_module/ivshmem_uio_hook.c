@@ -90,6 +90,11 @@ enum ivshmem_ftrace_e {
         RESET,
 };
 
+enum ivshmem_section_e {
+        MIN_VALID_OFFSET = 0x1000,
+        MAX_ALLOWED_MMAP_SIZE = 0x200000, /* 2MB */
+};
+
 struct ivshmem_lock {
         volatile bool is_locked;
         spinlock_t *spin;
@@ -101,6 +106,11 @@ struct ivshmem_context {
 
         struct ftrace_ops *ops;
         struct ivshmem_lock *lock;
+};
+
+struct ivshmem_mmap_data {
+        struct pt_regs *pt_regs;
+        unsigned long target_addr;
 };
 
 static struct ivshmem_context *__ivshmem_ctx_create(void);
@@ -118,6 +128,8 @@ static inline int __ivshmem_lock_destroy(void *del);
 static inline int __ivshmem_ops_destroy(void *del);
 static inline int __ivshmem_ctx_destroy(void *del);
 static inline int __ivshmem_uio_hook_exit(struct ivshmem_context *ctx);
+static inline int __ivshmem_mmap_guard(bool condition, spinlock_t *lock,
+                                       void *private);
 
 static struct ivshmem_context *g_ctx = NULL;
 
@@ -262,16 +274,36 @@ static void notrace __ivshmem_ftrace_hook_func(unsigned long ip,
 
                 /* only check from the /dev/uioX */
                 if (strncmp(dname, "uio", 3) == 0) {
-                        size_t length = vma->vm_end - vma->vm_start;
-                        if (length > ctx->limit_map_size) {
-                                /* call the dummy mmap */
-                                instruction_pointer_set(
-                                    pt_regs,
-                                    (unsigned long)__ivshmem_dummy_mmap);
+                        struct ivshmem_mmap_data mmap_data = {
+                            .pt_regs = pt_regs,
+                            .target_addr = (unsigned long)__ivshmem_dummy_mmap,
+                        };
 
-                                spin_unlock(lock->spin);
-                                return;
-                        }
+                        int ret;
+                        off_t offset = vma->vm_pgoff << PAGE_SHIFT;
+                        size_t length = vma->vm_end - vma->vm_start;
+                        DBG_MSG("offset: 0x%016lx, length: 0x%016lx", offset,
+                                length);
+
+                        /* control section */
+                        ret = __ivshmem_mmap_guard(offset < MIN_VALID_OFFSET &&
+                                                       offset + length >
+                                                           MIN_VALID_OFFSET,
+                                                   lock->spin, &mmap_data);
+                        FORMULA_GUARD(ret < 0, , "Invalid length value");
+
+                        /* data section */
+                        ret = __ivshmem_mmap_guard(
+                            offset >= MIN_VALID_OFFSET &&
+                                offset + length > MAX_ALLOWED_MMAP_SIZE,
+                            lock->spin, &mmap_data);
+                        FORMULA_GUARD(ret < 0, ,
+                                      "Mapping size exceeds allowed limit!");
+
+                        /* overflow from the configuration setting value */
+                        ret = __ivshmem_mmap_guard(length > ctx->limit_map_size,
+                                                   lock->spin, &mmap_data);
+                        FORMULA_GUARD(ret < 0, , "Overflow the length value.");
                 }
         }
 
@@ -303,7 +335,7 @@ static int __ivshmem_dummy_mmap(struct file *file, struct vm_area_struct *vma) {
         lock->is_locked = false;
         spin_unlock(lock->spin);
 
-        FORMULA_GUARD(1, -EINVAL, "Mapping size exceeds allowed limit!");
+        FORMULA_GUARD(1, -EINVAL, "Failed to call the uio_mmap,,");
 }
 
 static inline int __ivshmem_lock_destroy(void *del) {
@@ -342,6 +374,23 @@ static inline int __ivshmem_uio_hook_exit(struct ivshmem_context *ctx) {
         __ivshmem_ctx_destroy(ctx);
 
         DBG_MSG("Success to exit the ivshmem uio hook.");
+
+        return 0;
+}
+
+static inline int __ivshmem_mmap_guard(bool condition, spinlock_t *lock,
+                                       void *private) {
+        if (unlikely(condition)) {
+                if (private != NULL) {
+                        struct ivshmem_mmap_data *mmap_data =
+                            (struct ivshmem_mmap_data *)private;
+                        instruction_pointer_set(mmap_data->pt_regs,
+                                                mmap_data->target_addr);
+                }
+
+                spin_unlock(lock);
+                return -EINVAL;
+        }
 
         return 0;
 }
