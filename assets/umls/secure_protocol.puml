@@ -32,8 +32,8 @@ note over Client,Server: Secure channel(between Server and Client) is created
 Host -> Client : Notify: Secure IVSHMEM channel created
 note over Client,Server: Temporary channels are deleted
 
-== Session Key Negotiation ==
-Client -> Server : Exchange ephemeral Diffie-Hellman values\n(Compute shared secret)
+== Session Key Negotiation (Optional) ==
+Client -> Server : Exchange shared secret
 Server -> Client : Acknowledge key exchange
 
 == Secure Data Transfer ==

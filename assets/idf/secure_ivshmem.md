@@ -67,11 +67,11 @@ To prevent unauthorized access, we partition the shared memory into multiple seg
 
 To mitigate performance degradation caused by static partitioning, we propose a dynamic allocation mechanism that allows shared memory channels to be allocated and resized based on real-time usage. This ensures that resources are utilized efficiently without compromising security. However, dynamic partitioning introduces two major challenges:
 
-    * Challenge 1: Secure Channel Establishment
-    How can two services securely establish a communication channel without being vulnerable to spoofing attacks?
+  * Challenge 1: Secure Channel Establishment
+  How can two services securely establish a communication channel without being vulnerable to spoofing attacks?
 
-    * Challenge 2: Preventing Unauthorized Access
-    How can we ensure that a malicious service within a VM does not gain unauthorized access to dynamically allocated partitions?
+  * Challenge 2: Preventing Unauthorized Access
+  How can we ensure that a malicious service within a VM does not gain unauthorized access to dynamically allocated partitions?
 
 
 
@@ -94,32 +94,80 @@ To balance security and performance, we integrate a channel rebalancing mechanis
 To simplify IVSHMEM integration for developers, we provide an abstracted library that encapsulates security and concurrency management mechanisms. This allows customers to leverage IVSHMEM for inter-VM communication without the complexities of manual security handling, concurrency synchronization, or performance tuning.
 
 
-<!-- 
-Our proposed solution includes techniques to prevent the above security threats and handle concurrency management by partitioning the shared memory into multiple segments, with each partition exclusively accessible to designated VMs. This approach can prevent a potentially malicious VM from accessing unauthorized memory regions. Also, by only writing data to only defined(?) region, no need to worry for the careful concurrency handling.  However, just simply partitioning the memory segments to predefined region has critical problems.
-it can reduce the available shared memory size, which may degrade performance. For instance, if a 4MB IVSHMEM region is divided into four 1MB partitions, assigning one partition to a communication channel(assigned to service A in VM1 - service B in VM2) effectively blocks threats from malicious VM (VM3).  Nevertheless, using only 1MB instead of 4MB can negatively impact performance. 
-
-Our solution propose a way to dynamically allocate a shared memory channel for the communication. and the size of this communication channel is rebalanced based on the usage of channel. By dyanmically allocating a connection channel, we can mitigate performance degradation coming from the buffer partitioning. However, two challenge arises for the dynamic partition allocation.
-
-1) First, how can a two service endpoint establish a secure channel without spoofing attack?
-
-2) Second, how can we prevent a malicious access to partitioned channel region from malicious service in VM?
-
-
-To address these challenges comming from dynamic channel allocation of shared memory region, (first problem) we propose a hypervisor-mediated handshake protocol for establishment of initial channel connection between two endpoint service. (second problem) we propose a kernel module implementation for the granual access control of the channel in IVSHMEM, which prevent a malicious access from malicious service.
-
-We finally combine a channel channel rebalancing techniques which mitigate the performance degradation coming from partitioning the memory region while maintaining enhanced security. We provide an abstracted library which allow the customer to implement IVSHMEM communication easily with not so much worry of the security and concurrency problem, and performance degradation coming from this. -->
-
-
-
-
-
 ### 4.2 Previous Solution (if any): Describe any previous solution used to solve the problem
 
 
-mempipe
-xensocket
-grant table
-sivshm
+
+1) Memory Segmentation and Access Control
+
+This approach involves partitioning the shared memory into exclusive segments, ensuring that each virtual machine (VM) is limited to its designated portion. For example, in systems like SIVSHM, each worker (or VM) is granted access solely to its allocated segment. This design isolates the effects of any illegal memory access—if a VM attempts to read or write outside its segment, the impact is contained within its own memory space, often triggering a fault without affecting other VMs.
+
+**Advantages:**
+
+- Provides strong isolation between VMs.
+- Limits the blast radius of any erroneous or malicious memory access.
+
+**Limitations:**
+
+- Memory buffers are statically partitioned, leading to potential underutilization of the available memory.
+- Pre-allocation is required, reducing flexibility in handling dynamic memory demands.
+
+
+2) Xen’s Grant Table
+
+The Xen hypervisor introduces the concept of grant tables, where a VM explicitly grants another VM access to specific memory pages. In this model, each memory sharing action is governed by capabilities that the hypervisor enforces.
+
+**Advantages:**
+
+-Fine-grained control over which memory pages are shared.
+- The hypervisor ensures that only the granted pages are accessible, enhancing security.
+
+**Limitations:**
+
+Managing grants for a large number of pages can introduce overhead.
+The granularity of control, while secure, can complicate dynamic memory sharing and reallocation in more flexible communication scenarios.
+
+
+3) VirtIO Network
+
+VirtIO Network emulates a network card to facilitate communication between VMs via standard network protocols. Although it provides a way to leverage well-understood network interfaces for inter-VM communication, the emulation layer introduces performance bottlenecks.
+
+**Advantages:**
+
+Leverages standard networking protocols and tools.
+Can integrate with existing network-based security measures.
+
+**Limitations:**
+
+Performance degradation due to the overhead of network emulation.
+Not originally designed for high-speed, low-latency memory sharing, which is crucial for certain applications.
+
+
+4) Transparent Inter-VM Shared Memory Solutions
+
+A number of approaches have been developed to provide transparent inter-VM shared memory, such as xensocket, xenloop, and mempipe. These methods aim to make shared memory communication appear as seamless as standard network communication, abstracting away the underlying complexities.
+
+**Advantages:**
+
+Simplifies the programming model by providing a transparent interface for memory sharing.
+Can often be integrated with existing virtualization platforms with minimal changes.
+
+**Limitations:**
+
+These solutions can suffer from performance inefficiencies, particularly when compared to specialized shared memory protocols.
+The added abstraction layer may also introduce security vulnerabilities if not properly managed.
+
+
+
+
+**References:**
+
+
+[SIVSHM](https://arxiv.org/pdf/1909.10377#:~:text=both%20security%20and%20better%20throughout,exchange%20of%20eventfds%20amongst%20VMs)
+[Grant Table](https://wiki.xenproject.org/wiki/Grant_Table#:~:text=Each%20domain%20has%20its%20own,operations%20on%20the%20granter%E2%80%99s%20memory)
+[Xen Loop](https://dl.acm.org/doi/10.1145/1383422.1383437)
+[Mempipe](https://ieeexplore.ieee.org/document/7416013)
+
 
 
 ## 5. Overview of the invention
@@ -176,6 +224,8 @@ anyone customer can access and easily inspect this code and protocol with the re
 
 
 ### Design Detail
+
+![ivshmem partition](./pictures/ivshmem_partition.png)
 
 
 #### Service-based Channel Separation
@@ -252,6 +302,8 @@ This granular access control approach not only reinforces data isolation among d
 
 ### Hypervisor Mediated Handshake Protocol
 
+![ivshmem key holder](./pictures/ivshmem_key_holder.png)
+
 We examine why a secure handshake protocol is essential for IVSHMEM communication by identifying its potential security risks, demonstrate how our scenario differs from conventional communication protocols, and introduce our detailed proposed handshake design.
 
 
@@ -291,6 +343,7 @@ The detailed handshake protocol steps are provided below, demonstrating the secu
 
 
 
+![hypervisor handshake](./pictures/hypervisor_handshake.png)
 
 
 
@@ -342,15 +395,12 @@ The detailed handshake protocol steps are provided below, demonstrating the secu
      - The trusted host creates a communication channel for the server and client and notifies the client.  
      - The trusted host deletes temporary channels previously established with both the client and the server.  
 
-7. **Session Key Negotiation:**  
+7. **Session Key Negotiation (Optional):**  
    - **Purpose:** Finalize the authentication process and derive session keys.  
-   - **Actions:** The client and server use the provided ephemeral Diffie-Hellman values to compute a shared secret.  
+   - **Actions:** The client and server use the provided ephemeral Diffie-Hellman values to compute a shared secret. 
 
-8. **Secure Data Transfer:**  
-   - **Purpose:** Enable confidential and integrity-protected communication.  
-   - **Action:** With keys derived from the ephemeral exchange and mutual authentication complete, the client and server commence secure data transfer over the authorized IVSHMEM channel.  
 
-9. **Session Management (Optional Enhancements):**  
+9. **Session Management:**  
    - **Re-keying and Channel Teardown:**  
      - For long-lived sessions, incorporate periodic key renegotiation to limit key exposure.  
    - **Session Resumption:**  
