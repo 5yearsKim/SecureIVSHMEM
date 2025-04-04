@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./assets/images/secure_ivshmem_logo.png" alt="Project Logo" width="400" height="200" style="object-fit: cover;"/>
+  <img src="./assets/images/secure_ivshmem_logo_cropped.png" alt="Project Logo" width="350"/>
 </p>
 
 <h1 align="center">Secure IVSHMEM</h1>
