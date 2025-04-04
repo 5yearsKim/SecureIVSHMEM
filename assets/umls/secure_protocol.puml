@@ -32,12 +32,12 @@ note over Client,Server: Secure channel(between Server and Client) is created
 Host -> Client : Notify: Secure IVSHMEM channel created
 note over Client,Server: Temporary channels are deleted
 
-== Session Key Negotiation (Optional) ==
+== Session Key Negotiation (Optional, Only for higher security) ==
 Client -> Server : Exchange shared secret
 Server -> Client : Acknowledge key exchange
 
 == Secure Data Transfer ==
-Client <-> Server : Encrypted data transfer
+Client <-> Server : Secure data transfer
 
 
 @enduml

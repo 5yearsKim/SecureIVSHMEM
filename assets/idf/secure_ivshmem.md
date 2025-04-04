@@ -12,18 +12,15 @@ Intel IA Korea
 
 ## 3. Resubmision Responses:
 
-
 N/A
 
 ## 4. Techonlogy Background
 
 
 
-### Introduction to Virtualization Technology
+### Virtualization in the Automotive Industry
 Virtualization refers to a technology that allows a single physical computing resource to run multiple isolated environments by abstracting hardware from the software. A hypervisor abstracts the underlying hardware so that multiple VMs (Virtual Machines) share the same physical resources while remaining isolated from each other.
 
-
-### Virtualization in the Automotive Industry
 One of the fields that virtualization is actively used is the automotive industry. The advances in semiconductors have shifted system architectures from traditional microcontrollers(MCUs) to powerful System-on-Chip(SoC). This evolution not only enhances computational capabilities but also paves the way for Software-Defined Vehicles (SDVs), where flexibility, scalability, and rapid updates are paramount. In SDVs, virtualization technology plays a crucial role by enabling the coexistence of multiple VMs on a single hardware platform, ensuring isolated yet efficient execution of diverse applications. For example, modern cockpit domain controllers often deploy separate VMs for real-time operations (RTOS) and infotainment systems, which is essential for balancing performance and safety.
 
 
@@ -68,9 +65,11 @@ To prevent unauthorized access, we partition the shared memory into multiple seg
 To mitigate performance degradation caused by static partitioning, we propose a dynamic allocation mechanism that allows shared memory channels to be allocated and resized based on real-time usage. This ensures that resources are utilized efficiently without compromising security. However, dynamic partitioning introduces two major challenges:
 
   * Challenge 1: Secure Channel Establishment
+
   How can two services securely establish a communication channel without being vulnerable to spoofing attacks?
 
   * Challenge 2: Preventing Unauthorized Access
+
   How can we ensure that a malicious service within a VM does not gain unauthorized access to dynamically allocated partitions?
 
 
@@ -83,7 +82,7 @@ To establish a secure communication channel between two endpoints, we introduce 
 
 
 2. Granular Access Control via Kernel Module:
-To enforce fine-grained access control over dynamically allocated partitions, we implement a kernel module that regulates access permissions at the memory region level. This mechanism ensures that only authorized services can read or write to allocated channels, effectively mitigating unauthorized access risks.
+To enforce fine-grained access control over dynamically allocated partitions, we implement a kernel module that regulates access permissions at the memory region level. This mechanism ensures that only authorized services can read or write to allocated channels, effectively mitigating unauthorized access risks. This blocks malicious access to memory regions, such as eavedropping, without the overhead of data encryption.
 
 3. Channel Rebalancing for Performance Optimization:
 To balance security and performance, we integrate a channel rebalancing mechanism that dynamically adjusts the size of shared memory channels based on real-time communication demands. This approach prevents performance degradation due to excessive partitioning while maintaining strong security guarantees.
@@ -163,10 +162,10 @@ The added abstraction layer may also introduce security vulnerabilities if not p
 **References:**
 
 
-[SIVSHM](https://arxiv.org/pdf/1909.10377#:~:text=both%20security%20and%20better%20throughout,exchange%20of%20eventfds%20amongst%20VMs)
-[Grant Table](https://wiki.xenproject.org/wiki/Grant_Table#:~:text=Each%20domain%20has%20its%20own,operations%20on%20the%20granter%E2%80%99s%20memory)
-[Xen Loop](https://dl.acm.org/doi/10.1145/1383422.1383437)
-[Mempipe](https://ieeexplore.ieee.org/document/7416013)
+- [SIVSHM](https://arxiv.org/pdf/1909.10377#:~:text=both%20security%20and%20better%20throughout,exchange%20of%20eventfds%20amongst%20VMs)
+- [Grant Table](https://wiki.xenproject.org/wiki/Grant_Table#:~:text=Each%20domain%20has%20its%20own,operations%20on%20the%20granter%E2%80%99s%20memory)
+- [Xen Loop](https://dl.acm.org/doi/10.1145/1383422.1383437)
+- [Mempipe](https://ieeexplore.ieee.org/document/7416013)
 
 
 
@@ -175,7 +174,7 @@ The added abstraction layer may also introduce security vulnerabilities if not p
 
 ### 5.1 Short Summary – In 1-3 sentences, describe the core of your solution
 
-We offer a library and kernel module that secure IVSHMEM communication by isolating channels and implementing a secure handshake protocol. Additionally, we reduce performance overhead through dynamic allocation of partitioned regions.
+We propose a communication protocol that secure IVSHMEM communication by isolating communication channels and implementing a secure handshake protocol. This ensures end-to-end data protection in shared memory regions without introducing encryption overhead. Additionally, we reduce the performance overhead caused by partitioned buffers through the dynamic allocation of partitioned regions.
 
 
 ### 5.2 Advantages – In 1-3 sentences, describe the value of the invention to Intel or to our customers.
@@ -204,8 +203,8 @@ implementation
 #### B. If there are visual inspection and/or reverse engineering techniques that can be used to identify the feature, please describe them.
 
 
-Code is going to be opened to all customers with liscence
-anyone customer can access and easily inspect this code and protocol with the restriction of liscence
+Code is going to be opened to all customers with the liscence.
+Anyone can access and easily inspect this code and protocol under the restriction of the liscence
 
 #### C. If documentation such as product literature would show usage of the invention, please let us know what to look for in that regard.
 
@@ -230,7 +229,7 @@ anyone customer can access and easily inspect this code and protocol with the re
 
 #### Service-based Channel Separation
 
-Our design divides the IVSHMEM architecture into two primary sections: the **Control Section** and **the Data Section**. The Control Section is a fixed-size region where a trusted host stores dynamic configurations related to data allocation, while the Data Section is where virtual machines (VMs) actually read and write data through their assigned channels. Importantly, only the trusted host has permission to modify data in the Control Section, and each VM is restricted to reading and writing only to its designated channels within the Data Section.
+Our design divides the IVSHMEM architecture into two primary sections: the **Control Section** and the **Data Section**. The Control Section is a fixed-size region where a trusted host stores dynamic configurations related to data allocation, while the Data Section is where virtual machines (VMs) actually read and write data through their assigned channels. Importantly, only the trusted host has permission to modify data in the Control Section, and each VM is restricted to reading and writing only to its designated channels within the Data Section.
 
 
 The **Data Section** comprises multiple channels, with each channel serving as a dedicated buffer space for a specific server and client service pair. For each pair, a dedicated channel is allocated, and the Control Section dynamically adjusts its size based on the activation of channels.
@@ -395,7 +394,7 @@ The detailed handshake protocol steps are provided below, demonstrating the secu
      - The trusted host creates a communication channel for the server and client and notifies the client.  
      - The trusted host deletes temporary channels previously established with both the client and the server.  
 
-7. **Session Key Negotiation (Optional):**  
+7. **Session Key Negotiation (Optional, Only for higher security):**  
    - **Purpose:** Finalize the authentication process and derive session keys.  
    - **Actions:** The client and server use the provided ephemeral Diffie-Hellman values to compute a shared secret. 
 
@@ -405,25 +404,6 @@ The detailed handshake protocol steps are provided below, demonstrating the secu
      - For long-lived sessions, incorporate periodic key renegotiation to limit key exposure.  
    - **Session Resumption:**  
      - Implement mechanisms (similar to TLS session tickets) for efficient session resumption without repeating the full handshake process.  
-
-
-<!-- handshake end -->
-
-
-\subsection{A Design for Performant Data Transfer}
-
-\subsubsection{Dynamic Channel Rebalancing}
-
-blah blah blah
-
-\subsubsection{Lock-free Data Transfer}
-
-blah blah blah
-
-\subsubsection{Bi-directional Ring Buffer}
-
-blah blah blah
-
 
 
 
