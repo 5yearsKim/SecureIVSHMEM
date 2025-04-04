@@ -1,4 +1,21 @@
-# IVSHMEM Performance - Proof of Concepts
+<p align="center">
+  <img src="./assets/images/secure_ivshmem_logo.png" alt="Project Logo" width="400" height="200" style="object-fit: cover;"/>
+</p>
+
+<h1 align="center">Secure IVSHMEM</h1>
+
+<p align="center">
+  Secure and Performant, the new IVSHMEM Communication Protocol
+</p>
+
+---
+
+<!-- ## 🚀 Features
+
+- Feature 1
+- Feature 2
+- Feature 3 -->
+
 
 This document introduces the core ideas behind our approach to enhancing IVSHMEM performance, with a focus on security, efficiency, and dynamic resource management. The full details are available in the main README: [./ivshmem_perf/README.md](./ivshmem_perf/README.md)
 
