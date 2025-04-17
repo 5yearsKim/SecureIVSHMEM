@@ -107,3 +107,21 @@ Develop a kernel module that centrally controls access to the IVSHMEM region for
 
 3. **Minimal Locking Overhead:**
    - Locks are used only during infrequent rebalancing operations, allowing most operations to run lock-free in a multi-process environment.
+
+
+## Quick Starts
+
+You can start locally with pseudo shared memory device on local machine.
+
+```sh
+cd dev_shm
+./build_and_load.sh
+```
+
+Then, build example directory.
+
+```sh
+cd examples
+mkdir build && cd build
+cmake ..
+```
