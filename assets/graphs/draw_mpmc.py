@@ -8,20 +8,20 @@ save_path = "./output/mpmc.png"
 df = pd.read_csv(data_path)
 
 # Set the Number of producers as the index for easier plotting
-df.set_index('Number of producers', inplace=True)
+df.set_index('num_channel', inplace=True)
 
 # Plot the data
-plt.figure(figsize=(8, 6))
-plt.plot(df.index, df['Channel base'], marker='o', linestyle='-', color='blue', label='Channel base')
-plt.plot(df.index, df['Lock base'], marker='s', linestyle='-', color='red', label='Lock base')
+plt.figure()
+plt.plot(df.index, df['multiple'], marker='o', linestyle='-', color='brown', label='Channel base')
+plt.plot(df.index, df['single'], marker='s', linestyle='-', color='darkblue', label='Lock base')
 
 # Adding labels and title
-plt.xlabel('Number of Producers')
+plt.xlabel('Number of Channels')
 plt.ylabel('Throughput(MB/s)')
-plt.title('Throughput - Number of Producers')
+plt.title('Throughput - Number of Channels')
 plt.legend()
-plt.grid(True)
 
 # Show the graph
 plt.tight_layout()
 plt.savefig(save_path)
+plt.show()
