@@ -8,4 +8,6 @@
 *.log
 *.out
 *.pdf
+*.bst
 *.synctex.gz
+

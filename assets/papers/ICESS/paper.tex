@@ -1,0 +1,446 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+% The preceding line is only needed to identify funding in the first footnote. If that is unneeded, please comment it out.
+%Template version as of 6/27/2024
+
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{enumitem}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+\begin{document}
+
+\title{Secure IVSHMEM Protocol \\
+    \thanks{Identify applicable funding agency here. If none, delete this.}
+}
+
+\author{\IEEEauthorblockN{1\textsuperscript{st} Given Name Surname}
+\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\textit{name of organization (of Aff.)}\\
+City, Country \\
+email address or ORCID}
+\and
+\IEEEauthorblockN{2\textsuperscript{nd} Given Name Surname}
+\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\textit{name of organization (of Aff.)}\\
+City, Country \\
+email address or ORCID}
+\and
+\IEEEauthorblockN{3\textsuperscript{rd} Given Name Surname}
+\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\textit{name of organization (of Aff.)}\\
+City, Country \\
+email address or ORCID}
+\and
+\IEEEauthorblockN{4\textsuperscript{th} Given Name Surname}
+\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\textit{name of organization (of Aff.)}\\
+City, Country \\
+email address or ORCID}
+\and
+\IEEEauthorblockN{5\textsuperscript{th} Given Name Surname}
+\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\textit{name of organization (of Aff.)}\\
+City, Country \\
+email address or ORCID}
+\and
+\IEEEauthorblockN{6\textsuperscript{th} Given Name Surname}
+\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\textit{name of organization (of Aff.)}\\
+City, Country \\
+email address or ORCID}
+}
+
+\maketitle
+
+\begin{abstract}
+This document is a model and instructions for \LaTeX.
+This and the IEEEtran.cls file define the components of your paper [title, text, heads, etc.]. *CRITICAL: Do Not Use Symbols, Special Characters, Footnotes, 
+or Math in Paper Title or Abstract.
+\end{abstract}
+
+\begin{IEEEkeywords}
+component, formatting, style, styling, insert.
+\end{IEEEkeywords}
+
+\section{Introduction}
+The automotive industry is rapidly evolving, driven by advances in semiconductor technology that have shifted system architectures from traditional microcontrollers (MCUs) to powerful Systems-on-Chip (SoCs). This evolution not only enhances computational capabilities but also paves the way for Software-Defined Vehicles (SDVs), where flexibility, scalability, and rapid updates are paramount. In SDVs, virtualization technology plays a crucial role by enabling the coexistence of multiple virtual machines (VMs) on a single hardware platform, ensuring isolated yet efficient execution of diverse applications. For example, modern cockpit domain controllers often deploy separate VMs for real-time operations (RTOS) and infotainment systems, which is essential for balancing performance and safety.
+
+Inter-VM communication in these environments is critical. Traditional approaches, such as TCP/UDP over a network stack or even UART-based messaging, often fall short in terms of speed and resource efficiency. Alternative solutions like VirtIO offer a para-virtualized communication mechanism through ring buffers (VirtQueues), but they do not fully leverage the benefits of shared physical memory. IVSHMEM (Inter-VM Shared Memory) addresses these limitations by mapping each VM's virtualized PCI device to a common physical memory region, allowing rapid data exchange through shared memory. Despite its performance advantages, this method introduces significant security challenges; multiple VMs accessing the same memory space creates vulnerabilities where a compromised or malicious VM could potentially access or modify data belonging to another VM.
+
+This concern is particularly acute in scenarios where critical systems interact with less secure environments. For instance, when an RTOS communicates with an Android-based infotainment VM, there is a tangible risk that a malicious application within Android might tamper with the shared memory region. Such tampering could result in attacks ranging from man-in-the-middle to eavesdropping, ultimately compromising system stability and safety.
+
+In response to these challenges, we propose a secure protocol designed specifically for IVSHMEM communication in automotive systems. Our approach introduces robust security measures on top of the IVSHMEM framework, ensuring data integrity and access control even in an environment with inherent vulnerabilities. While our protocol does introduce some performance overhead, we have implemented novel techniques to mitigate this impact, ensuring that the overhead remains minimal relative to the performance gains achieved by shared memory communication.
+
+In this paper, we provide a detailed analysis of the security threats associated with IVSHMEM, explore the limitations of existing inter-VM communication methods, and describe our protocol's architecture and mitigation strategies. Through comprehensive evaluation, we demonstrate that our secure protocol successfully balances the need for robust security with the high-performance requirements of modern automotive systems and SDVs.
+
+
+\section{Background}
+
+We explore the evolution of shared memory IPC—from its origins in minimizing data copying in single OS environments to its advanced application in inter-VM communication—and examine the challenges of establishing secure channels over inherently insecure mediums.
+
+\subsection{Shared Memory Inter-Process Communication (IPC)}
+
+Shared memory IPC is a communication mechanism that allows multiple processes running on the same operating system to access a common memory region. This method was originally introduced to avoid redundant data copies between processes, thereby enhancing performance. The concept has been extended to inter-VM communication, where co-located virtual machines (VMs) on the same host exchange data via a shared memory channel. Instead of routing data through the host operating system or hypervisor—an approach that incurs additional overhead—the sender VM writes data directly into a shared memory region and then notifies the receiver VM via an interrupt. This streamlined process significantly accelerates communication between VMs.
+
+
+OpenMPI - Job Isolation?
+Boost Interprocess?
+
+\subsection{IVSHMEM: Mechanism and Architecture}
+
+
+IVSHMEM (Inter-VM Shared Memory) is a specialized implementation of shared memory IPC designed for virtualized environments. It emulates a virtual PCI device to expose the shared memory's base address and size to guest VMs. The design leverages the standardized PCI configuration to facilitate memory mapping and efficient communication. Specifically, IVSHMEM utilizes:
+
+- **BAR0 (Base Address Register 0):** This region (256 bytes of MMIO) holds the device registers, which control the operation of the virtual device.
+- **BAR1:** It contains the MSI-X table and Pending Bit Array (PBA), primarily used by the IVSHMEM doorbell mechanism for signaling interrupts.
+- **BAR2:** This is mapped to the shared memory object, providing a direct communication channel between VMs.
+
+The doorbell interrupt mechanism enabled by this configuration allows VMs to notify one another when new data is available, ensuring efficient core utilization and reducing latency in inter-VM communication.
+
+%----------Figure: handshake -----------------
+\begin{figure}[ht]
+\begin{center}
+  \includegraphics[width=0.95\linewidth]{./figures/ivshmem_arch.png}
+\end{center}
+\caption{\label{fig:ivshmem_arch} IVSHMEM architecture figure 
+  caption's text. }
+\end{figure}
+%% %---------------------------
+
+
+
+
+\subsection{Security Concerns of Shared Memory}
+While shared memory IPC within a single operating system benefits from well-established security mechanisms—such as file access controls, sandboxing, and enhanced security modules like SELinux or AppArmor—IVSHMEM presents unique challenges. In a traditional OS environment, the operating system enforces strict access controls over shared memory regions, ensuring that only authorized processes can read or write data. However, when multiple, potentially untrusted VMs share the same memory space, these protections are significantly diminished. A compromised or malicious VM could easily access or tamper with data in the shared region, leading to unauthorized data disclosure, corruption, or even system instability. This risk is compounded by the fact that the emulated PCI device, which exposes the shared memory, does not inherently enforce robust access control policies among the VMs.
+
+
+\subsection{Secure Communication Over Insecure Channels}
+
+The challenge of ensuring secure communication in IVSHMEM environments is analogous to securing communication over the Internet, where multiple parties exchange information over an inherently insecure channel. In the realm of network communications, protocols such as TLS rely on key exchange mechanisms, mutual authentication, and end-to-end encryption to safeguard data integrity and confidentiality. Similarly, secure multi-party communication techniques—such as Diffie-Hellman key exchange and advanced encryption standards—are employed to establish trust even when the channel is compromised.
+
+In the context of IVSHMEM, the situation is even more complex because multiple services must share the same restricted memory space as a communication channel. This necessitates the design of a secure protocol that not only ensures confidentiality and integrity—akin to TLS or other network security protocols—but also accommodates the shared nature of the memory resource. Our research addresses these challenges by proposing a secure protocol that implements robust cryptographic techniques to protect the data transmitted via IVSHMEM, while also mitigating the performance overhead typically associated with such security measures.
+
+
+
+Through this background, we highlight the evolution from traditional shared memory IPC to advanced inter-VM communication methods like IVSHMEM, outline its architectural underpinnings, and discuss the critical security concerns that arise when untrusted VMs share a common memory resource. This sets the stage for our proposed solution, which aims to secure inter-VM communication in automotive systems without compromising on the performance benefits of shared memory mechanisms.
+
+
+
+
+\section{The need for Secure IVSHMEM Protocol}
+
+blah
+
+\subsection{Threat Model}
+
+
+untrusted VMs
+replay attacks
+man in the middle attacks
+eavesdropping
+
+
+\subsection{Conventional Security protocol}
+- Why TLS can't be applied to this case? -> CA can't be applied, because no domain, end to end
+
+- Why ee2e conventional method can't be applied?
+
+
+
+
+\subsection{General Purpose of Secure IVSHMEM Protocol}
+
+blah blah blah
+
+\subsection{Performance Mitigation}
+
+blah blah blah
+
+
+
+\section{Design Proposal (or) Secure IVSHMEM Protocol}
+
+blah blah blah
+
+
+
+
+\subsection{Service-based Channel Separation}
+
+Our design divides the IVSHMEM architecture into two primary sections: the \textbf{Control Section} and \textbf{the Data Section}. The Control Section is a fixed-size region where a trusted host stores dynamic configurations related to data allocation, while the Data Section is where virtual machines (VMs) actually read and write data through their assigned channels. Importantly, only the trusted host has permission to modify data in the Control Section, and each VM is restricted to reading and writing only to its designated channels within the Data Section.
+
+
+The \textbf{Data Section} comprises multiple channels, with each channel serving as a dedicated buffer space for a specific server and client service pair. For each pair, a dedicated channel is allocated, and the Control Section dynamically adjusts its size based on the activation of channels.
+
+For example, consider a scenario where Service A in VM1 needs to send data to Service B in VM2. In this case, the trusted host allocates an initial channel with a buffer size of 16 KB. The control information for this allocation is written into the Control Section, and only Service A and Service B are permitted to access the channel’s buffer. Additionally, the size of the channel buffer can be adjusted (enlarged or shrunk) based on the usage patterns between the services.
+
+An exception to this rule is the first channel in the Data Section. This channel is of a fixed size and is exclusively used for communication between the trusted host and the VMs—for instance, during the initial handshake when a VM sends data to the trusted host. All VMs have access to this channel.
+
+
+The \textbf{Control Section} maintains metadata about buffer assignments and channel usage. Its structure includes shared variables and an array of channel structures, which are described below:
+
+\begin{description}[leftmargin=0.5cm, labelindent=0cm]
+  \item[\textbf{free\_start\_offset} (int):] 
+    Points to the next available space for a new buffer allocation.
+  \item[\textbf{num\_active\_channel} (int):] 
+    Tracks the number of currently active channels.
+  \item[\textbf{control\_lock} (lock):] 
+    Ensures thread-safe modifications during resizing operations.
+  \item[\textbf{channels} (array of channel structures):] 
+    Holds metadata for each communication channel.
+    \begin{description}[leftmargin=0.5cm]
+      \item[\textbf{service\_id} (int):] 
+        The service ID as notified by the hypervisor.
+      \item[\textbf{client\_process\_id} (int):] 
+        An identifier used for granular access control.
+      \item[\textbf{server\_service\_id} (int):] 
+        The identifier for the server-side service.
+      \item[\textbf{server\_process\_id} (int):] 
+        The process identifier for the server.
+      \item[\textbf{data\_address} (pointer):] 
+        The address of the assigned channel buffer.
+      \item[\textbf{data\_size} (size):] 
+        The size of the assigned channel buffer.
+    \end{description}
+\end{description}
+
+Channels utilize the metadata provided in the Control Section to read from and write to the designated buffer regions.
+
+
+\subsection{Granualr Access Control}
+
+
+To enhance the security of the IVSHMEM framework, we propose a granular access control mechanism that restricts access to the shared memory channels on a per-application basis. This mechanism is implemented via a dedicated kernel module that operates on top of the IVSHMEM device driver.
+
+
+
+\subsubsection{Kernel Module Integration}
+
+The kernel module intercepts all read and write system calls directed at the IVSHMEM device. By doing so, it validates each access request against a predefined set of policies that specify which host or VM is permitted to interact with a given channel. Notably, the module consults the IVSHMEM control section to enforce these access control rules, ensuring that only the authorized party can access the corresponding channel buffer.
+
+
+
+\subsubsection{Channel-Specific Enforcement}
+
+Each channel within the Data Section is allocated to a specific pair of services (e.g., a server and a client). The kernel module uses the control section's metadata to determine channel assignments and enforces strict access control, permitting operations only on the designated channel buffers.
+
+
+
+\subsubsection{Disabling Memory Mapping}
+
+For security reasons, the use of `mmap` is explicitly prohibited for the IVSHMEM device. While this may sacrifice some of the performance benefits typically associated with memory mapping, it is a necessary trade-off to prevent unauthorized access and to maintain robust security across the system.
+
+This granular access control approach not only reinforces data isolation among different VMs and the host but also mitigates potential risks associated with unauthorized memory access, ensuring that the system's security is prioritized over marginal performance gains.
+
+
+
+\subsection{Hypervisor Mediated Handshake Protocol}
+
+We examine why a secure handshake protocol is essential for IVSHMEM communication by identifying its potential security risks, demonstrate how our scenario differs from conventional communication protocols, and introduce our detailed proposed handshake design.
+
+
+
+
+
+
+\subsubsection{The Need for Secure Handshake}
+
+
+\textbf{Mitigating Spoofing/Impersonation Risks:}
+
+Since the trusted host (e.g., dom0 in Xen, SOS in ACRN, or the host in QEMU/KVM) does not inherently know which service is associated with which endpoint, it must ensure that a malicious entity cannot impersonate a legitimate client or server. The protocol must defend against such spoofing attacks by validating the identity of each endpoint before establishing a dedicated channel.
+    
+\textbf{Securing Data in an Untrusted Environment:}
+
+The IVSHMEM memory space, used for key exchange and initial communication, is inherently insecure and can be monitored by potentially untrusted VMs. Encrypting sensitive data—including credentials and key exchange parameters—ensures that any eavesdropped information remains unintelligible and useless to an attacker.
+    
+\textbf{Robust Key Exchange Over Insecure Channels:}
+
+Although the key exchange takes place over an untrusted channel, the protocol employs strong cryptographic techniques (e.g., ephemeral Diffie-Hellman) to generate a shared secret. This secret is then used to secure all subsequent communications between the client and server, effectively mitigating the risks associated with the insecure IVSHMEM space.
+
+
+The following handshake protocol leverages these principles to ensure that even in an environment where the initial contact is over an untrusted channel, the eventual communication between client and server is both authenticated and secure. This design effectively addresses the threat of impersonation or spoofing by mandating robust credential validation and encryption from the very first step of the handshake process.
+
+
+
+
+
+\subsubsection{The Difference from Conventional Security Protocols}
+
+This scenario is similar to other network communication contexts—such as secure exchanges over VPNs or encrypted Wi-Fi networks—in that multiple parties must communicate over an inherently insecure channel. In our proposal, mutual authentication is implemented much like mTLS, where both the client and server prove their identities, and service-level authentication is ensured similarly to EE2E, confirming that the specific service endpoints are legitimate. These mechanisms verify credentials and secure connections, aligning with established practices in conventional protocols.
+
+However, our proposed protocol is different from the conventional internet based security protocol in that 1) The trusted host (hypervisor) is not merely a passive participant but is responsible for allocating finite resources and establishing the communication channel  and 2) The hypervisor functions as a certification authority (CA), validating service credentials and orchestrating the creation of dedicated secure channels between clients and servers. 
+
+The detailed handshake protocol steps are provided below, demonstrating the secure bootstrapping and key negotiation processes that lead to the establishment of a confidential IVSHMEM channel.
+
+
+
+
+
+
+\subsubsection{Protocol Steps}
+
+%----------Figure: handshake -----------------
+\begin{figure}[ht]
+\begin{center}
+  \includegraphics[width=0.95\linewidth]{./figures/ivshmem_handshake.png}
+\end{center}
+\caption{\label{fig:handshake} handshake figure 
+  caption's text. }
+\end{figure}
+%% %---------------------------
+
+
+
+% ----------- Handshake Protocol ------------
+\begin{enumerate}[label=\arabic*.]
+  \item \textbf{Client Hello:}
+    \begin{itemize}
+      \item \textbf{Purpose:} Initiate the handshake and propose communication parameters.
+      \item \textbf{Message Contents:}
+        \begin{itemize}
+          \item Protocol version and supported extensions.
+          \item A list of supported cipher suites.
+          \item Client identity details (service ID, process ID, VM ID).
+          \item A nonce combined with a timestamp or sequence number for replay protection.
+        \end{itemize}
+    \end{itemize}
+    
+  \item \textbf{Trusted Host (Hypervisor) Hello:}
+    \begin{itemize}
+      \item \textbf{Purpose:} Acknowledge the client's request and provide trusted credentials.
+      \item \textbf{Message Contents:}
+        \begin{itemize}
+          \item The trusted host’s certificate.
+          \item Supported cipher suites (if negotiation is to be assisted).
+          \item Any additional protocol extensions.
+        \end{itemize}
+      \item \textbf{Action:} A temporary secure channel is created between the client and the trusted host.
+    \end{itemize}
+
+  \item \textbf{Client Authentication and Challenge:}
+    \begin{itemize}
+      \item \textbf{Purpose:} Enable explicit mutual authentication.
+      \item \textbf{Message Contents:}
+        \begin{itemize}
+          \item The client’s certificate.
+          \item A cryptographic challenge (e.g., a signature over a nonce) to prove possession of the corresponding private key.
+          \item The intended server’s service ID.
+        \end{itemize}
+    \end{itemize}
+    
+  \item \textbf{Host Verification and Server Request:}
+    \begin{itemize}
+      \item \textbf{Purpose:} Verify the client's credentials and initiate communication with the server.
+      \item \textbf{Action:}
+        \begin{itemize}
+          \item The trusted host validates the client’s certificate and challenge.
+          \item Upon successful validation, the trusted host creates a temporary channel for the server and forwards a secure connection request to the server, including the nonce.
+        \end{itemize}
+    \end{itemize}
+    
+  \item \textbf{Server Hello:}
+    \begin{itemize}
+      \item \textbf{Purpose:} Server passes its credentials and decision to accept the client’s request.
+      \item \textbf{Message Contents:}
+        \begin{itemize}
+          \item The server’s certificate.
+          \item A server-side cryptographic challenge (to verify the server’s private key).
+          \item Its supported cipher suites.
+          \item Acceptance of the client’s request.
+        \end{itemize}
+    \end{itemize}
+    
+  \item \textbf{Trusted Host Authorization and Channel Creation:}
+    \begin{itemize}
+      \item \textbf{Purpose:} Establish a secure, dedicated IVSHMEM channel for data transfer between the server and client.
+      \item \textbf{Action:}
+        \begin{itemize}
+          \item The trusted host verifies the server’s certificate and the corresponding challenge.
+          \item The trusted host creates a communication channel for the server and client and notifies the client.
+          \item The trusted host deletes temporary channels previously established with both the client and the server.
+        \end{itemize}
+    \end{itemize}
+    
+  \item \textbf{Session Key Negotiation:}
+    \begin{itemize}
+      \item \textbf{Purpose:} Finalize the authentication process and derive session keys.
+      \item \textbf{Actions:} The client and server use the provided ephemeral Diffie-Hellman values to compute a shared secret.
+    \end{itemize}
+    
+  \item \textbf{Secure Data Transfer:}
+    \begin{itemize}
+      \item \textbf{Purpose:} Enable confidential and integrity-protected communication.
+      \item \textbf{Action:} With keys derived from the ephemeral exchange and mutual authentication complete, the client and server commence secure data transfer over the authorized IVSHMEM channel.
+    \end{itemize}
+    
+  \item \textbf{Session Management (Optional Enhancements):}
+    \begin{itemize}
+      \item \textbf{Re-keying and Channel Teardown:}
+        \begin{itemize}
+          \item For long-lived sessions, incorporate periodic key renegotiation to limit key exposure.
+        \end{itemize}
+      \item \textbf{Session Resumption:}
+        \begin{itemize}
+          \item Implement mechanisms (similar to TLS session tickets) for efficient session resumption without repeating the full handshake process.
+        \end{itemize}
+    \end{itemize}
+\end{enumerate}
+% ------------------------------
+
+
+
+
+\section*{Acknowledgment}
+
+The preferred spelling of the word ``acknowledgment'' in America is without 
+an ``e'' after the ``g''. Avoid the stilted expression ``one of us (R. B. 
+G.) thanks $\ldots$''. Instead, try ``R. B. G. thanks$\ldots$''. Put sponsor 
+acknowledgments in the unnumbered footnote on the first page.
+
+\section*{References}
+
+Please number citations consecutively within brackets \cite{b1}. The 
+sentence punctuation follows the bracket \cite{b2}. Refer simply to the reference 
+number, as in \cite{b3}---do not use ``Ref. \cite{b3}'' or ``reference \cite{b3}'' except at 
+the beginning of a sentence: ``Reference \cite{b3} was the first $\ldots$''
+
+Number footnotes separately in superscripts. Place the actual footnote at 
+the bottom of the column in which it was cited. Do not put footnotes in the 
+abstract or reference list. Use letters for table footnotes.
+
+Unless there are six authors or more give all authors' names; do not use 
+``et al.''. Papers that have not been published, even if they have been 
+submitted for publication, should be cited as ``unpublished'' \cite{b4}. Papers 
+that have been accepted for publication should be cited as ``in press'' \cite{b5}. 
+Capitalize only the first word in a paper title, except for proper nouns and 
+element symbols.
+
+For papers published in translation journals, please give the English 
+citation first, followed by the original foreign-language citation \cite{b6}.
+
+\begin{thebibliography}{00}
+\bibitem{b1} G. Eason, B. Noble, and I. N. Sneddon, ``On certain integrals of Lipschitz-Hankel type involving products of Bessel functions,'' Phil. Trans. Roy. Soc. London, vol. A247, pp. 529--551, April 1955.
+\bibitem{b2} J. Clerk Maxwell, A Treatise on Electricity and Magnetism, 3rd ed., vol. 2. Oxford: Clarendon, 1892, pp.68--73.
+\bibitem{b3} I. S. Jacobs and C. P. Bean, ``Fine particles, thin films and exchange anisotropy,'' in Magnetism, vol. III, G. T. Rado and H. Suhl, Eds. New York: Academic, 1963, pp. 271--350.
+\bibitem{b4} K. Elissa, ``Title of paper if known,'' unpublished.
+\bibitem{b5} R. Nicole, ``Title of paper with only first word capitalized,'' J. Name Stand. Abbrev., in press.
+\bibitem{b6} Y. Yorozu, M. Hirano, K. Oka, and Y. Tagawa, ``Electron spectroscopy studies on magneto-optical media and plastic substrate interface,'' IEEE Transl. J. Magn. Japan, vol. 2, pp. 740--741, August 1987 [Digests 9th Annual Conf. Magnetics Japan, p. 301, 1982].
+\bibitem{b7} M. Young, The Technical Writer's Handbook. Mill Valley, CA: University Science, 1989.
+\bibitem{b8} D. P. Kingma and M. Welling, ``Auto-encoding variational Bayes,'' 2013, arXiv:1312.6114. [Online]. Available: https://arxiv.org/abs/1312.6114
+\bibitem{b9} S. Liu, ``Wi-Fi Energy Detection Testbed (12MTC),'' 2023, gitHub repository. [Online]. Available: https://github.com/liustone99/Wi-Fi-Energy-Detection-Testbed-12MTC
+\bibitem{b10} ``Treatment episode data set: discharges (TEDS-D): concatenated, 2006 to 2009.'' U.S. Department of Health and Human Services, Substance Abuse and Mental Health Services Administration, Office of Applied Studies, August, 2013, DOI:10.3886/ICPSR30122.v2
+\bibitem{b11} K. Eves and J. Valasek, ``Adaptive control for singularly perturbed systems examples,'' Code Ocean, Aug. 2023. [Online]. Available: https://codeocean.com/capsule/4989235/tree
+\end{thebibliography}
+
+\vspace{12pt}
+\color{red}
+IEEE conference templates contain guidance text for composing and formatting conference papers. Please ensure that all template text is removed from your conference paper prior to submission to the conference. Failure to remove the template text from your paper may result in your paper not being published.
+
+\end{document}
