@@ -14,3 +14,9 @@ target_link_libraries(lock_writer PRIVATE secure_ivshmem)
 
 add_executable(lock_init lock_init.c)
 target_link_libraries(lock_init PRIVATE secure_ivshmem)
+
+
+find_package(OpenSSL REQUIRED)
+
+add_executable(aes_writer aes_main.c)
+target_link_libraries(aes_writer PRIVATE secure_ivshmem OpenSSL::Crypto)

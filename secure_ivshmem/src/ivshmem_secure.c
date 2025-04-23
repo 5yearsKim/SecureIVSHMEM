@@ -54,8 +54,6 @@ int ivshmem_send_buffer(struct IvshmemChannelKey *p_key,
     fprintf(stderr, "Failed to request channel\n");
     return -1;
   }
-  // printf("Channel acquired: buf_size = %zu, data_size = %zu\n",
-  //        p_chan->buf_size, p_chan->data_size);
 
   void *p_data = ivshmem_get_data_section(p_ctr);
 
@@ -86,7 +84,6 @@ int ivshmem_send_buffer(struct IvshmemChannelKey *p_key,
     if (p_chan->head == p_chan->tail - 1 ||
         (p_chan->head == p_chan->num_page - 1 && p_chan->tail == 0)) {
       usleep(1 * 10);
-      p_chan->sender_itr++;
       continue;
     }
 
@@ -107,8 +104,6 @@ int ivshmem_send_buffer(struct IvshmemChannelKey *p_key,
     atomic_fetch_add(&p_chan->data_size, to_sent);
 
     p_chan->last_sent_at = time(NULL);
-
-    p_chan->sender_itr++;
   }
 
   return 0;
@@ -123,16 +118,9 @@ int ivshmem_recv_buffer(struct IvshmemChannelKey *p_key,
     return -1;
   }
 
-  uint8_t prev_itr = p_chan->sender_itr;
   void *p_data = ivshmem_get_data_section(p_ctr);
 
   int data_received = 0;
-
-  // manage interrupt
-  while (p_chan->sender_itr == prev_itr) {
-    usleep(1 * 1000);
-    continue;
-  }
 
   while (1) {
     if (p_ctr->control_mutex != 0) {
@@ -145,24 +133,20 @@ int ivshmem_recv_buffer(struct IvshmemChannelKey *p_key,
 
 #if IVSHMEM_TYPE == 1
 
-    if (channel->ref_count == 0) {
+    if (p_chan->ref_count == 0) {
       continue;
     }
 
-    int to_receive = MIN(size - data_received, channel->data_size);
-
+    int to_receive = MIN(size - data_received, p_chan->data_size);
     memcpy((char *)p_buffer + data_received,
-           ((char *)p_data + channel->buf_offset), to_receive);
+           ((char *)p_data + p_chan->buf_offset), to_receive);
     data_received += to_receive;
 
     // update channel
     atomic_store(&p_chan->data_size, 0);
-    channel->ref_count--;
+    p_chan->ref_count--;
 
 #elif IVSHMEM_TYPE == 2
-
-    // printf("DEBUG: passed! sender_itr = %d, prev_itr = %d\n",
-    //        p_chan->sender_itr, prev_itr);
 
     if (p_chan->head == p_chan->tail) {
       // printf("DEBUG: channel is empty\n");
@@ -185,7 +169,6 @@ int ivshmem_recv_buffer(struct IvshmemChannelKey *p_key,
 #else
 #error "Invalid IVSHMEM_TYPE"
 #endif
-    prev_itr = p_chan->sender_itr;
   }
 
   return 0;

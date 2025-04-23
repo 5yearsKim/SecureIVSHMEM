@@ -187,9 +187,6 @@ void ivshmem_init_channel(struct IvshmemControlSection *p_ctr_sec,
   p_channel->buf_size = IVSHMEM_CHANNEL_INIT_SIZE;
   p_channel->data_size = 0;
 
-  p_channel->sender_itr = 0;
-  p_channel->receiver_itr = 0;
-
   p_channel->last_sent_at = time(NULL);
 
 #if IVSHMEM_TYPE == 1
