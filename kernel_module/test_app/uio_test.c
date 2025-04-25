@@ -6,7 +6,20 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#define UIO_DEV "/dev/uio0"
+#ifndef HOOK_DEV
+#define HOOK_DEV 2 // 1: UIO, 2: MYSHM
+#endif
+
+#if   HOOK_DEV == 1
+  #define HOOK_DNAME   "uio"
+  #define HOOK_TARGET "/dev/uio0"
+#elif HOOK_DEV == 2
+  #define HOOK_DNAME   "myshm"
+  #define HOOK_TARGET "/dev/myshm"
+#else
+  #error "Unknown HOOK_MODE, must be UIO or MYSHM"
+#endif
+
 
 /* Total 2M shared memory */
 /* 0x0000 0000 ~ 0x0000 0fff: control section */
@@ -15,15 +28,15 @@
 #define CONTROL_SECTION_SIZE 0x1000
 #define DATA_SECTION_SIZE 0x1FF000
 
-//#define INVALID_LENGTH
-//#define SIZE_EXCEEDS
-//#define OVERFLOW_LENGTH
+#define INVALID_LENGTH
+// #define SIZE_EXCEEDS
+// #define OVERFLOW_LENGTH
 #define SUCCESS_MMAP
 
 int main(void) {
-        int fd = open(UIO_DEV, O_RDWR | O_SYNC);
+        int fd = open(HOOK_TARGET, O_RDWR | O_SYNC);
         if (fd < 0) {
-                fprintf(stderr, "[IAPG ERR] Failed to open!\n");
+                fprintf(stderr, "[IVSHMEM ERR] Failed to open!\n");
                 return -EPERM;
         }
 
@@ -52,11 +65,11 @@ int main(void) {
 #endif
 
         if (target_addr == MAP_FAILED) {
-                fprintf(stderr, "[IAPG ERR] Failed to mmap!\n");
+                fprintf(stderr, "[IVSHMEM ERR] Failed to mmap!\n");
         } else {
-                fprintf(stdout, "[IAPG] mmap.\n");
+                fprintf(stdout, "[IVSHMEM] mmap.\n");
                 munmap((void *)target_addr, 0x1000);
-                fprintf(stdout, "[IAPG] unmap.\n");
+                fprintf(stdout, "[IVSHMEM] unmap.\n");
         }
 
         close(fd);

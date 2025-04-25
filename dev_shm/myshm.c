@@ -70,8 +70,9 @@ static int shm_release(struct inode *inode, struct file *file)
 //     return 0;
 // }
 
-static int shm_mmap(struct file *filp, struct vm_area_struct *vma)
+int shm_mmap(struct file *filp, struct vm_area_struct *vma)
 {
+    printk(KERN_INFO "%sMapping memory\n", shm_prefix);
     unsigned long offset = vma->vm_pgoff << PAGE_SHIFT;
     unsigned long size = vma->vm_end - vma->vm_start;
     unsigned long cur_vaddr, cur_pfn;
@@ -179,9 +180,12 @@ static void __exit shm_exit(void)
     printk(KERN_INFO "%sModule removed\n", shm_prefix);
 }
 
+
 module_init(shm_init);
 module_exit(shm_exit);
 
+EXPORT_SYMBOL(shm_mmap);
+
 MODULE_LICENSE("GPL");
-MODULE_AUTHOR("Your Name");
+MODULE_AUTHOR("Onion Kim");
 MODULE_DESCRIPTION("A char device driver with 4MB memory and mmap support");
