@@ -1,27 +1,30 @@
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 
 data_path = "./data/mpmc.csv"
 save_path = "./output/mpmc.png"
 
-# Read the CSV data into a DataFrame
+# Read and index by number of channels
 df = pd.read_csv(data_path)
-
-# Set the Number of producers as the index for easier plotting
 df.set_index('num_channel', inplace=True)
 
-# Plot the data
+# Positions for grouped bars
+x = np.arange(len(df.index))
+bar_width = 0.35
+
 plt.figure()
-plt.plot(df.index, df['multiple'], marker='o', linestyle='-', color='brown', label='Channel base')
-plt.plot(df.index, df['single'], marker='s', linestyle='-', color='darkblue', label='Lock base')
+plt.bar(x + bar_width/2, df['multiple'], width=bar_width, color='brown', label='Channel based')
+plt.bar(x - bar_width/2, df['single'], width=bar_width, color='darkblue', label='Lock based')
 
-# Adding labels and title
+# Labels, ticks, title, legend
 plt.xlabel('Number of Channels')
-plt.ylabel('Throughput(MB/s)')
-plt.title('Throughput - Number of Channels')
+plt.ylabel('Throughput (MB/s)')
+plt.xticks(x, df.index)  # label ticks with the channel counts
+plt.title('Throughput – Number of Channels')
 plt.legend()
-
-# Show the graph
 plt.tight_layout()
+
+# Save and show
 plt.savefig(save_path)
 plt.show()
