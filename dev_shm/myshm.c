@@ -38,39 +38,20 @@ static const char *shm_prefix = "myshm: ";
  * File operations
  */
 
-static int shm_open(struct inode *inode, struct file *file)
+static int myshm_open(struct inode *inode, struct file *file)
 {
     printk(KERN_INFO "%sDevice opened\n", shm_prefix);
     return 0;
 }
 
-static int shm_release(struct inode *inode, struct file *file)
+static int myshm_release(struct inode *inode, struct file *file)
 {
     printk(KERN_INFO "%sDevice closed\n", shm_prefix);
     return 0;
 }
 
-// static int shm_mmap(struct file *filp, struct vm_area_struct *vma)
-// {
-//     unsigned long offset = vma->vm_pgoff << PAGE_SHIFT;
-//     unsigned long size = vma->vm_end - vma->vm_start;
-//     unsigned long pfn;
 
-//     /* Check if requested size is within our buffer */
-//     if (offset + size > MEM_SIZE)
-//         return -EINVAL;
-
-//     /* Convert the vmalloc'ed address to a physical page frame number */
-//     pfn = vmalloc_to_pfn(device_buffer + offset);
-
-//     /* Map the page frame into user space */
-//     if (remap_pfn_range(vma, vma->vm_start, pfn, size, vma->vm_page_prot))
-//         return -EAGAIN;
-
-//     return 0;
-// }
-
-int shm_mmap(struct file *filp, struct vm_area_struct *vma)
+int myshm_mmap(struct file *filp, struct vm_area_struct *vma)
 {
     printk(KERN_INFO "%sMapping memory\n", shm_prefix);
     unsigned long offset = vma->vm_pgoff << PAGE_SHIFT;
@@ -98,16 +79,16 @@ int shm_mmap(struct file *filp, struct vm_area_struct *vma)
 // Define file operations that our driver supports.
 static struct file_operations fops = {
     .owner   = THIS_MODULE,
-    .open    = shm_open,
-    .release = shm_release,
-    .mmap    = shm_mmap,
+    .open    = myshm_open,
+    .release = myshm_release,
+    .mmap    = myshm_mmap,
 };
 
 
 /*
  * Module initialization
  */
-static int __init shm_init(void)
+static int __init myshm_init(void)
 {
     int ret;
 
@@ -169,7 +150,7 @@ static int __init shm_init(void)
 /*
  * Module exit (cleanup)
  */
-static void __exit shm_exit(void)
+static void __exit myshm_exit(void)
 {
     if (device_buffer)
         vfree(device_buffer);
@@ -181,10 +162,10 @@ static void __exit shm_exit(void)
 }
 
 
-module_init(shm_init);
-module_exit(shm_exit);
+module_init(myshm_init);
+module_exit(myshm_exit);
 
-EXPORT_SYMBOL(shm_mmap);
+EXPORT_SYMBOL(myshm_mmap);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Onion Kim");
