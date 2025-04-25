@@ -17,7 +17,7 @@
   #define HOOK_MMAP  "uio_mmap"
   #define HOOK_DNAME   "uio"
 #elif HOOK_DEV == 2
-  #define HOOK_MMAP "shm_mmap"
+  #define HOOK_MMAP "myshm_mmap"
   #define HOOK_DNAME   "myshm"
 #else
   #error "Unknown HOOK_MODE, must be UIO or MYSHM"
