@@ -1,0 +1,9 @@
+
+defaultIndent: "  "
+
+
+modifyLineBreaks:
+    textWrapOptions:
+        columns: 80
+
+
