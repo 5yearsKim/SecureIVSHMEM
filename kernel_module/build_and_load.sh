@@ -1,6 +1,6 @@
 #!/bin/bash
 
-NAME="myshm"
+NAME="ivshmem_uio_hook"
 
 echo ">> Building and loading $NAME module";
 make clean;make;
@@ -26,12 +26,5 @@ if [ $? -ne 0 ]; then
     exit 1;
 fi
 
-
-sudo chmod 666 /dev/$NAME;
-
-if [ $? -ne 0 ]; then
-    echo ">> Failed to change permission of /dev/$NAME";
-    exit 1;
-fi
 
 echo ">> Done";

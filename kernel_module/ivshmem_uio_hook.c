@@ -9,18 +9,33 @@
 #include <linux/string.h>
 #include <linux/version.h>
 
+#ifndef HOOK_DEV
+#define HOOK_DEV 2 // 1: UIO, 2: MYSHM
+#endif
+
+#if   HOOK_DEV == 1
+  #define HOOK_MMAP  "uio_mmap"
+  #define HOOK_DNAME   "uio"
+#elif HOOK_DEV == 2
+  #define HOOK_MMAP "shm_mmap"
+  #define HOOK_DNAME   "myshm"
+#else
+  #error "Unknown HOOK_MODE, must be UIO or MYSHM"
+#endif
+
+
 #define ERR_INVALID_PTR "Invalid Pointer."
 #define ERR_INVALID_RET "Invalild return value."
 #define ERR_INVALID_FD "Invalid File Descripter."
 #define ERR_INVALID_PARAMS "Invalid Parameters."
 #define ERR_MEMORY_SHORTAGE "Failed to allocate the memory."
 
-//#define DEBUG
+#define DEBUG
 
 #ifdef DEBUG
 #define DBG_MSG(fmt, ...)                                                      \
         do {                                                                   \
-                pr_info("[IAPG] " fmt " / func : %s, line : %d\n",             \
+                pr_info("[IVSHMEM] " fmt " / func : %s, line : %d\n",             \
                         ##__VA_ARGS__, __func__, __LINE__);                    \
         } while (0)
 #else
@@ -31,7 +46,7 @@
 
 #define ERR_MSG(fmt, ...)                                                      \
         do {                                                                   \
-                pr_err("[IAPG ERR] " fmt " / func : %s, line : %d\n",          \
+                pr_err("[IVSHMEM ERR] " fmt " / func : %s, line : %d\n",          \
                        ##__VA_ARGS__, __func__, __LINE__);                     \
         } while (0)
 
@@ -101,6 +116,7 @@ static void notrace __ivshmem_ftrace_hook_func(unsigned long ip,
                                                struct ftrace_regs *regs);
 static int __ivshmem_origin_mmap(struct file *file, struct vm_area_struct *vma);
 static int __ivshmem_dummy_mmap(struct file *file, struct vm_area_struct *vma);
+static int __ivshmem_pre_handler(struct kprobe *kp, struct pt_regs *regs);
 
 static inline int __ivshmem_lock_destroy(void *del);
 static inline int __ivshmem_ops_destroy(void *del);
@@ -108,6 +124,11 @@ static inline int __ivshmem_ctx_destroy(void *del);
 static inline int __ivshmem_uio_hook_exit(struct ivshmem_context *ctx);
 static inline int __ivshmem_mmap_guard(bool condition, spinlock_t *lock,
                                        void *private);
+
+static struct kprobe kp = {
+    .symbol_name = HOOK_MMAP,
+    .pre_handler = __ivshmem_pre_handler,
+};
 
 static struct ivshmem_context *g_ctx = NULL;
 
@@ -135,6 +156,9 @@ static int __init ivshmem_uio_hook_init(void) {
             ftrace_set_filter_ip(ctx->ops, ctx->target_addr, REGISTER, SET);
         FORMULA_GUARD_WITH_EXIT_FUNC(ret < 0, ret, __ivshmem_uio_hook_exit(ctx),
                                      ERR_INVALID_RET);
+        DBG_MSG("ftrace_set_filter_ip() returned %d", ret);
+
+
 
         ret = register_ftrace_function(ctx->ops);
         FORMULA_GUARD_WITH_EXIT_FUNC(ret < 0, ret, __ivshmem_uio_hook_exit(ctx),
@@ -152,17 +176,20 @@ static void __exit ivshmem_uio_hook_exit(void) {
         __ivshmem_uio_hook_exit(g_ctx);
 }
 
+static int __ivshmem_pre_handler(struct kprobe *kp, struct pt_regs *regs) {
+    DBG_MSG("[IVSHMEM]>>> kprobe hit shm_mmap\n");
+    printk("test");
+    return 0;
+}
+
 static struct ivshmem_context *__ivshmem_ctx_create(void) {
         struct ivshmem_context *new =
             kmalloc(sizeof(struct ivshmem_context), GFP_KERNEL);
         FORMULA_GUARD(new == NULL, NULL, ERR_MEMORY_SHORTAGE);
 
-        /* target_addr */
-        struct kprobe kp = {
-            .symbol_name = "uio_mmap",
-        };
 
         int ret = register_kprobe(&kp);
+
         FORMULA_GUARD_WITH_EXIT_FUNC(ret < 0, NULL, __ivshmem_ctx_destroy(new),
                                      ERR_INVALID_RET);
 
@@ -170,7 +197,6 @@ static struct ivshmem_context *__ivshmem_ctx_create(void) {
 
         DBG_MSG("Target Addr: 0x%016lx", new->target_addr);
 
-        unregister_kprobe(&kp);
         FORMULA_GUARD_WITH_EXIT_FUNC(new->target_addr == 0, NULL,
                                      __ivshmem_ctx_destroy(new),
                                      ERR_INVALID_RET);
@@ -189,7 +215,7 @@ static struct ftrace_ops *__ivshmem_ops_create(void) {
 
         memset(new, 0, sizeof(struct ftrace_ops));
         new->func = __ivshmem_ftrace_hook_func;
-        new->flags = FTRACE_OPS_FL_SAVE_REGS | FTRACE_OPS_FL_RECURSION;
+        new->flags = FTRACE_OPS_FL_SAVE_REGS | FTRACE_OPS_FL_RECURSION | FTRACE_OPS_FL_IPMODIFY;
 
         DBG_MSG("Success to create the ops.");
 
@@ -218,6 +244,8 @@ static void notrace __ivshmem_ftrace_hook_func(unsigned long ip,
                                                unsigned long parent_ip,
                                                struct ftrace_ops *ops,
                                                struct ftrace_regs *regs) {
+        DBG_MSG("ftrace_hook_func: 0x%016lx, parent_ip: 0x%016lx, ops: %p, regs: %p", ip,
+                parent_ip, ops, regs);
         FORMULA_GUARD(ops == NULL || regs == NULL, , ERR_INVALID_PTR);
 
         struct ivshmem_context *ctx = (struct ivshmem_context *)ops->private;
@@ -247,11 +275,14 @@ static void notrace __ivshmem_ftrace_hook_func(unsigned long ip,
         spin_lock(lock->spin);
         lock->is_locked = true;
 
+        DBG_MSG("Hooked mmap: 0x%016lx, file: %p, vma: %p", ip, file, vma);
+
         if (file->f_path.dentry) {
                 const char *dname = file->f_path.dentry->d_name.name;
 
                 /* only check from the /dev/uioX */
-                if (strncmp(dname, "uio", 3) == 0) {
+                if (strncmp(dname, HOOK_DNAME, strlen(HOOK_DNAME)) == 0) {
+                        DBG_MSG("Hooked mmap: %s", dname);
                         struct ivshmem_mmap_data mmap_data = {
                             .pt_regs = pt_regs,
                             .target_addr = (unsigned long)__ivshmem_dummy_mmap,
@@ -343,6 +374,9 @@ static inline int __ivshmem_ctx_destroy(void *del) {
 
 static inline int __ivshmem_uio_hook_exit(struct ivshmem_context *ctx) {
         FORMULA_GUARD(ctx == NULL, -EINVAL, ERR_INVALID_PTR);
+
+        unregister_kprobe(&kp);
+        pr_info("IVSHMEM: kprobe unregistered\n");
 
         unregister_ftrace_function(ctx->ops);
         ftrace_set_filter_ip(ctx->ops, ctx->target_addr, REMOVE, SET);
