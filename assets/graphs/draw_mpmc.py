@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import mtl_config
 
 data_path = "./data/mpmc.csv"
 save_path = "./output/mpmc.png"

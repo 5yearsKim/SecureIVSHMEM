@@ -1,5 +1,6 @@
 import pandas as pd
 import matplotlib.pyplot as plt
+import mtl_config
 
 data_path = "./data/shm_basic.csv"
 save_path = "./output/shm_basic.png"
