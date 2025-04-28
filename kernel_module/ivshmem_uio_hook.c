@@ -13,16 +13,15 @@
 #define HOOK_DEV 2 // 1: UIO, 2: MYSHM
 #endif
 
-#if   HOOK_DEV == 1
-  #define HOOK_MMAP  "uio_mmap"
-  #define HOOK_DNAME   "uio"
+#if HOOK_DEV == 1
+#define HOOK_MMAP "uio_mmap"
+#define HOOK_DNAME "uio"
 #elif HOOK_DEV == 2
-  #define HOOK_MMAP "myshm_mmap"
-  #define HOOK_DNAME   "myshm"
+#define HOOK_MMAP "myshm_mmap"
+#define HOOK_DNAME "myshm"
 #else
-  #error "Unknown HOOK_MODE, must be UIO or MYSHM"
+#error "Unknown HOOK_MODE, must be UIO or MYSHM"
 #endif
-
 
 #define ERR_INVALID_PTR "Invalid Pointer."
 #define ERR_INVALID_RET "Invalild return value."
@@ -35,7 +34,7 @@
 #ifdef DEBUG
 #define DBG_MSG(fmt, ...)                                                      \
         do {                                                                   \
-                pr_info("[IVSHMEM] " fmt " / func : %s, line : %d\n",             \
+                pr_info("[IVSHMEM] " fmt " / func : %s, line : %d\n",          \
                         ##__VA_ARGS__, __func__, __LINE__);                    \
         } while (0)
 #else
@@ -46,7 +45,7 @@
 
 #define ERR_MSG(fmt, ...)                                                      \
         do {                                                                   \
-                pr_err("[IVSHMEM ERR] " fmt " / func : %s, line : %d\n",          \
+                pr_err("[IVSHMEM ERR] " fmt " / func : %s, line : %d\n",       \
                        ##__VA_ARGS__, __func__, __LINE__);                     \
         } while (0)
 
@@ -158,8 +157,6 @@ static int __init ivshmem_uio_hook_init(void) {
                                      ERR_INVALID_RET);
         DBG_MSG("ftrace_set_filter_ip() returned %d", ret);
 
-
-
         ret = register_ftrace_function(ctx->ops);
         FORMULA_GUARD_WITH_EXIT_FUNC(ret < 0, ret, __ivshmem_uio_hook_exit(ctx),
                                      ERR_INVALID_RET);
@@ -177,16 +174,15 @@ static void __exit ivshmem_uio_hook_exit(void) {
 }
 
 static int __ivshmem_pre_handler(struct kprobe *kp, struct pt_regs *regs) {
-    DBG_MSG("[IVSHMEM]>>> kprobe hit shm_mmap\n");
-    printk("test");
-    return 0;
+        DBG_MSG("[IVSHMEM]>>> kprobe hit shm_mmap\n");
+        printk("test");
+        return 0;
 }
 
 static struct ivshmem_context *__ivshmem_ctx_create(void) {
         struct ivshmem_context *new =
             kmalloc(sizeof(struct ivshmem_context), GFP_KERNEL);
         FORMULA_GUARD(new == NULL, NULL, ERR_MEMORY_SHORTAGE);
-
 
         int ret = register_kprobe(&kp);
 
@@ -215,7 +211,8 @@ static struct ftrace_ops *__ivshmem_ops_create(void) {
 
         memset(new, 0, sizeof(struct ftrace_ops));
         new->func = __ivshmem_ftrace_hook_func;
-        new->flags = FTRACE_OPS_FL_SAVE_REGS | FTRACE_OPS_FL_RECURSION | FTRACE_OPS_FL_IPMODIFY;
+        new->flags = FTRACE_OPS_FL_SAVE_REGS | FTRACE_OPS_FL_RECURSION |
+                     FTRACE_OPS_FL_IPMODIFY;
 
         DBG_MSG("Success to create the ops.");
 
@@ -244,8 +241,9 @@ static void notrace __ivshmem_ftrace_hook_func(unsigned long ip,
                                                unsigned long parent_ip,
                                                struct ftrace_ops *ops,
                                                struct ftrace_regs *regs) {
-        DBG_MSG("ftrace_hook_func: 0x%016lx, parent_ip: 0x%016lx, ops: %p, regs: %p", ip,
-                parent_ip, ops, regs);
+        DBG_MSG("ftrace_hook_func: 0x%016lx, parent_ip: 0x%016lx, ops: %p, "
+                "regs: %p",
+                ip, parent_ip, ops, regs);
         FORMULA_GUARD(ops == NULL || regs == NULL, , ERR_INVALID_PTR);
 
         struct ivshmem_context *ctx = (struct ivshmem_context *)ops->private;
